@@ -2,9 +2,11 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { CloudRain, TrendingUp, Users, FileText } from "lucide-react";
+import { isAuthenticated } from "@/services/api";
 import heroImage from "@/assets/hero-farmland.jpg";
 
 const Home = () => {
+  const authenticated = isAuthenticated();
   const features = [
     {
       icon: CloudRain,
@@ -98,10 +100,17 @@ const Home = () => {
             Ready to Transform Your Farming?
           </h2>
           <p className="text-xl mb-8 opacity-90">
-            Join thousands of farmers already using AgriSense
+            {authenticated 
+              ? "Continue to your dashboard to access all features"
+              : "Join thousands of farmers already using AgriSense"
+            }
           </p>
           <Button asChild size="lg" className="bg-white text-primary hover:bg-white/90 shadow-hover">
-            <Link to="/signup">Create Free Account</Link>
+            {authenticated ? (
+              <Link to="/dashboard">Go to Dashboard</Link>
+            ) : (
+              <Link to="/signup">Create Free Account</Link>
+            )}
           </Button>
         </div>
       </section>

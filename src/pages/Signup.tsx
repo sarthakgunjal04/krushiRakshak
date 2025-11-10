@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
+import { signupUser } from "../services/api";
 
 const Signup = () => {
   const [formData, setFormData] = useState({
@@ -15,16 +16,32 @@ const Signup = () => {
     password: "",
     userType: "",
   });
+  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (formData.name && formData.email && formData.password && formData.userType) {
-      toast.success("Account created successfully!");
-      navigate("/dashboard");
-    } else {
+    if (!formData.name || !formData.email || !formData.password || !formData.userType) {
       toast.error("Please fill in all required fields");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await signupUser({
+        name: formData.name,
+        phone: formData.phone || undefined,
+        email: formData.email,
+        password: formData.password,
+        userType: formData.userType,
+      });
+      toast.success(response.message || "Account created successfully!");
+      navigate("/dashboard");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to create account. Please try again.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -104,8 +121,12 @@ const Signup = () => {
             </Select>
           </div>
 
-          <Button type="submit" className="w-full bg-primary hover:bg-primary/90 mt-6">
-            Create Account
+          <Button 
+            type="submit" 
+            className="w-full bg-primary hover:bg-primary/90 mt-6"
+            disabled={isLoading}
+          >
+            {isLoading ? "Creating account..." : "Create Account"}
           </Button>
         </form>
 

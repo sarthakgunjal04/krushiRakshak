@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Menu, X, Bell, Globe, ChevronDown, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,11 +9,40 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useTheme } from "next-themes";
+import { isAuthenticated, logoutUser, getUser } from "@/services/api";
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const [authenticated, setAuthenticated] = useState(false);
+  const [user, setUser] = useState<any>(null);
   const location = useLocation();
+  const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
+
+  useEffect(() => {
+    // Check authentication status
+    const checkAuth = () => {
+      const isAuth = isAuthenticated();
+      setAuthenticated(isAuth);
+      if (isAuth) {
+        setUser(getUser());
+      } else {
+        setUser(null);
+      }
+    };
+
+    checkAuth();
+    // Check on route changes (less frequent polling)
+    const interval = setInterval(checkAuth, 2000);
+    return () => clearInterval(interval);
+  }, [location]);
+
+  const handleLogout = () => {
+    logoutUser();
+    setAuthenticated(false);
+    setUser(null);
+    navigate("/login");
+  };
 
   const navLinks = [
     { name: "Home", path: "/" },
@@ -89,24 +118,35 @@ const Navbar = () => {
               <span className="absolute top-1 right-1 h-2 w-2 bg-destructive rounded-full"></span>
             </Button>
 
-            {/* Profile Dropdown */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="hidden md:flex">
-                  <User className="h-5 w-5" />
-                  <ChevronDown className="h-3 w-3 ml-1" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="bg-popover">
-                <DropdownMenuItem asChild>
-                  <Link to="/profile">Profile</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem>Settings</DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link to="/login">Logout</Link>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {/* Profile Dropdown - Only show when authenticated */}
+            {authenticated ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="hidden md:flex">
+                    <User className="h-5 w-5" />
+                    <ChevronDown className="h-3 w-3 ml-1" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="bg-popover">
+                  {user && (
+                    <div className="px-2 py-1.5 text-sm font-semibold border-b">
+                      {user.name}
+                    </div>
+                  )}
+                  <DropdownMenuItem asChild>
+                    <Link to="/profile">Profile</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem>Settings</DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleLogout}>
+                    Logout
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <Button variant="ghost" asChild className="hidden md:flex">
+                <Link to="/login">Login</Link>
+              </Button>
+            )}
 
             {/* Mobile Menu Button */}
             <Button
