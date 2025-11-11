@@ -14,9 +14,19 @@ const api = axios.create({
 // Request interceptor to add auth token if available
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem("access_token");
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    // Don't add Authorization header to public/auth endpoints
+    const url = config.url || "";
+    const isPublicEndpoint = 
+      url.includes("/auth/signup") ||
+      url.includes("/auth/login") ||
+      url.includes("/admin/login");
+    
+    // Only add token for protected endpoints
+    if (!isPublicEndpoint) {
+      const token = localStorage.getItem("access_token");
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
     }
     return config;
   },
@@ -29,9 +39,19 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      // Unauthorized - clear token and redirect to login
+    const status = error.response?.status;
+    const url: string = error.config?.url || "";
+
+    // Don't redirect on auth routes (login/signup) - let them handle errors
+    const isAuthRoute =
+      url.includes("/auth/login") ||
+      url.includes("/auth/signup") ||
+      url.includes("/admin/login");
+
+    if (status === 401 && !isAuthRoute) {
+      // Unauthorized during app usage - clear token and redirect to login
       localStorage.removeItem("access_token");
+      localStorage.removeItem("user_data");
       window.location.href = "/login";
     }
     return Promise.reject(error);
@@ -80,11 +100,30 @@ export const loginUser = async (credentials: LoginCredentials): Promise<AuthResp
     
     return response.data;
   } catch (error: any) {
-    if (axios.isAxiosError(error)) {
-      const message = error.response?.data?.detail || error.message || "Login failed";
-      throw new Error(message);
+    // Handle different error scenarios with specific messages
+    if (error.response) {
+      // Server responded with error status
+      const status = error.response.status;
+      const detail = error.response.data?.detail || error.response.data?.message;
+
+      if (status === 401) {
+        throw new Error("Invalid email or password. Please check your credentials and try again.");
+      } else if (status === 400) {
+        throw new Error(detail || "Invalid request. Please check your input.");
+      } else if (status === 500) {
+        throw new Error("Server error. Please try again later.");
+      } else if (status === 404) {
+        throw new Error("Service not found. Please contact support.");
+      } else {
+        throw new Error(detail || "Login failed. Please try again.");
+      }
+    } else if (error.request) {
+      // Request was made but no response received
+      throw new Error("Unable to reach server. Please check your internet connection and try again.");
+    } else {
+      // Something else happened
+      throw new Error(error.message || "An unexpected error occurred. Please try again.");
     }
-    throw error;
   }
 };
 
@@ -103,11 +142,32 @@ export const signupUser = async (userData: SignupData): Promise<AuthResponse> =>
     
     return response.data;
   } catch (error: any) {
-    if (axios.isAxiosError(error)) {
-      const message = error.response?.data?.detail || error.message || "Signup failed";
-      throw new Error(message);
+    // Handle different error scenarios with specific messages
+    if (error.response) {
+      // Server responded with error status
+      const status = error.response.status;
+      const detail = error.response.data?.detail || error.response.data?.message;
+
+      if (status === 409) {
+        throw new Error("This email is already registered. Please try logging in instead.");
+      } else if (status === 400) {
+        throw new Error(detail || "Invalid information provided. Please check your input.");
+      } else if (status === 401) {
+        throw new Error("Unauthorized. Please try again.");
+      } else if (status === 500) {
+        throw new Error("Server error. Please try again later.");
+      } else if (status === 404) {
+        throw new Error("Service not found. Please contact support.");
+      } else {
+        throw new Error(detail || "Failed to create account. Please try again.");
+      }
+    } else if (error.request) {
+      // Request was made but no response received
+      throw new Error("Unable to reach server. Please check your internet connection and try again.");
+    } else {
+      // Something else happened
+      throw new Error(error.message || "An unexpected error occurred. Please try again.");
     }
-    throw error;
   }
 };
 
@@ -157,11 +217,15 @@ export const getCurrentUser = async (): Promise<User> => {
     if (storedUser) {
       return storedUser;
     }
-    if (axios.isAxiosError(error)) {
-      const message = error.response?.data?.detail || error.message || "Failed to get user";
-      throw new Error(message);
+    // If no stored user, throw the error
+    if (error.response) {
+      const detail = error.response.data?.detail || error.response.data?.message;
+      throw new Error(detail || "Failed to get user information.");
+    } else if (error.request) {
+      throw new Error("Unable to reach server. Please check your connection.");
+    } else {
+      throw new Error(error.message || "Failed to get user information.");
     }
-    throw error;
   }
 };
 

@@ -28,7 +28,11 @@ const Login = () => {
       toast.success(response.message || "Login successful!");
       navigate("/dashboard");
     } catch (error: any) {
-      toast.error(error.message || "Invalid email or password");
+      // Show specific error message from API
+      const errorMessage = error.message || "Invalid email or password. Please try again.";
+      toast.error(errorMessage, {
+        duration: 4000,
+      });
     } finally {
       setIsLoading(false);
     }

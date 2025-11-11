@@ -39,7 +39,11 @@ const Signup = () => {
       toast.success(response.message || "Account created successfully!");
       navigate("/dashboard");
     } catch (error: any) {
-      toast.error(error.message || "Failed to create account. Please try again.");
+      // Show specific error message from API
+      const errorMessage = error.message || "Failed to create account. Please try again.";
+      toast.error(errorMessage, {
+        duration: 4000,
+      });
     } finally {
       setIsLoading(false);
     }
