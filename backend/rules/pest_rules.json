@@ -1,0 +1,34 @@
+{
+  "aphid_high_humidity": {
+    "description": "High humidity & NDVI drop suggests aphids",
+    "conditions": [
+      {"feature": "humidity", "op": ">", "value": 70},
+      {"feature": "ndvi_change", "op": "<", "value": -0.05}
+    ],
+    "score": 0.9,
+    "recommendation": "Inspect field and apply neem spray",
+    "severity": "high"
+  },
+  "whitefly_high_temp": {
+    "description": "High temperature with moderate humidity suggests whitefly",
+    "conditions": [
+      {"feature": "temperature", "op": ">", "value": 32},
+      {"feature": "humidity", "op": ">", "value": 60},
+      {"feature": "humidity", "op": "<", "value": 75}
+    ],
+    "score": 0.75,
+    "recommendation": "Monitor leaf undersides and apply appropriate pesticide",
+    "severity": "medium"
+  },
+  "bollworm_ndvi_drop": {
+    "description": "Significant NDVI drop indicates possible bollworm damage",
+    "conditions": [
+      {"feature": "ndvi_change", "op": "<", "value": -0.1},
+      {"feature": "crop_stage", "op": "==", "value": "flowering"}
+    ],
+    "score": 0.85,
+    "recommendation": "Check for bollworm larvae and apply targeted treatment",
+    "severity": "high"
+  }
+}
+

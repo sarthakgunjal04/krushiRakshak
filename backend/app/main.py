@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
+from . import fusion_engine
 
 app = FastAPI(
     title="AgriSense Backend API",
@@ -125,6 +126,11 @@ async def get_user_by_email(email: str):
         "userType": user["userType"],
     }
 
+
+# -------------------------------------------------------------------
+# 🔌 Include routers
+# -------------------------------------------------------------------
+app.include_router(fusion_engine.router)
 
 # -------------------------------------------------------------------
 # 🌐 Root Route
