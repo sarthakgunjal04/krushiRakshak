@@ -1,4 +1,5 @@
 import axios from "axios";
+import type { DashboardResponse, AdvisoryResponse } from "../types/fusion";
 
 // Backend API base URL - adjust this if your backend runs on a different port
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
@@ -225,6 +226,66 @@ export const getCurrentUser = async (): Promise<User> => {
       throw new Error("Unable to reach server. Please check your connection.");
     } else {
       throw new Error(error.message || "Failed to get user information.");
+    }
+  }
+};
+
+// ============================================================================
+// Fusion Engine API Functions
+// ============================================================================
+
+/**
+ * Fetch dashboard data from Fusion Engine
+ * Returns weather, market prices, alerts, and crop health data
+ */
+export const getDashboardData = async (): Promise<DashboardResponse> => {
+  try {
+    const response = await api.get<DashboardResponse>("/fusion/dashboard");
+    return response.data;
+  } catch (error: any) {
+    if (error.response) {
+      const status = error.response.status;
+      const detail = error.response.data?.detail || error.response.data?.message;
+      
+      if (status === 500) {
+        throw new Error("Server error while loading dashboard data. Please try again later.");
+      } else if (status === 404) {
+        throw new Error("Dashboard service not found. Please contact support.");
+      } else {
+        throw new Error(detail || "Failed to load dashboard data. Please try again.");
+      }
+    } else if (error.request) {
+      throw new Error("Unable to reach server. Please check your internet connection and try again.");
+    } else {
+      throw new Error(error.message || "An unexpected error occurred while loading dashboard data.");
+    }
+  }
+};
+
+/**
+ * Fetch advisory data for a specific crop from Fusion Engine
+ * @param cropName - Name of the crop (e.g., "cotton", "wheat", "rice")
+ */
+export const getAdvisory = async (cropName: string): Promise<AdvisoryResponse> => {
+  try {
+    const response = await api.get<AdvisoryResponse>(`/fusion/advisory/${cropName.toLowerCase()}`);
+    return response.data;
+  } catch (error: any) {
+    if (error.response) {
+      const status = error.response.status;
+      const detail = error.response.data?.detail || error.response.data?.message;
+      
+      if (status === 404) {
+        throw new Error(`Advisory not found for ${cropName}. Please try a different crop.`);
+      } else if (status === 500) {
+        throw new Error("Server error while loading advisory. Please try again later.");
+      } else {
+        throw new Error(detail || "Failed to load advisory. Please try again.");
+      }
+    } else if (error.request) {
+      throw new Error("Unable to reach server. Please check your internet connection and try again.");
+    } else {
+      throw new Error(error.message || "An unexpected error occurred while loading advisory.");
     }
   }
 };

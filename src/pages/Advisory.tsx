@@ -1,34 +1,126 @@
+import { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Download, CheckCircle, Droplets, Sprout, Eye } from "lucide-react";
+import { Download, CheckCircle, Droplets, Sprout, Eye, Loader2, AlertTriangle, ArrowLeft } from "lucide-react";
+import { getAdvisory } from "@/services/api";
+import type { AdvisoryResponse, Recommendation } from "@/types/fusion";
 
 const Advisory = () => {
-  const recommendations = [
-    {
-      icon: Sprout,
-      title: "Apply Organic Pesticide",
-      description: "Use neem-based spray on affected cotton plants",
-      priority: "high",
-    },
-    {
-      icon: Droplets,
-      title: "Increase Irrigation",
-      description: "Water plants early morning for next 3 days",
-      priority: "medium",
-    },
-    {
-      icon: Eye,
-      title: "Monitor Crop Growth",
-      description: "Check leaf health daily for next week",
-      priority: "low",
-    },
-  ];
+  const { crop } = useParams<{ crop: string }>();
+  const navigate = useNavigate();
+  const [advisory, setAdvisory] = useState<AdvisoryResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!crop) {
+      setError("No crop specified. Please select a crop.");
+      setIsLoading(false);
+      return;
+    }
+
+    const fetchAdvisory = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const data = await getAdvisory(crop);
+        setAdvisory(data);
+      } catch (err: any) {
+        setError(err.message || "Unable to load advisory data");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchAdvisory();
+  }, [crop]);
+
+  const getPriorityVariant = (priority: string) => {
+    switch (priority.toLowerCase()) {
+      case "high":
+        return "destructive";
+      case "medium":
+        return "default";
+      case "low":
+        return "secondary";
+      default:
+        return "default";
+    }
+  };
+
+  const getRecommendationIcon = (title: string) => {
+    const lowerTitle = title.toLowerCase();
+    if (lowerTitle.includes("irrigat") || lowerTitle.includes("water") || lowerTitle.includes("moisture")) {
+      return Droplets;
+    }
+    if (lowerTitle.includes("monitor") || lowerTitle.includes("check") || lowerTitle.includes("inspect")) {
+      return Eye;
+    }
+    return Sprout;
+  };
+
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return "Recently";
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString("en-IN", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return "Recently";
+    }
+  };
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="min-h-screen py-8 px-4 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
+          <p className="text-muted-foreground">Loading Advisory...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error || !advisory) {
+    return (
+      <div className="min-h-screen py-8 px-4 flex items-center justify-center">
+        <div className="text-center max-w-md">
+          <AlertTriangle className="h-12 w-12 mx-auto mb-4 text-destructive" />
+          <h2 className="text-2xl font-bold mb-2">Unable to Load Advisory</h2>
+          <p className="text-muted-foreground mb-4">{error || "Advisory data not available"}</p>
+          <div className="flex gap-2 justify-center">
+            <Button onClick={() => navigate("/dashboard")} variant="outline">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Dashboard
+            </Button>
+            <Button onClick={() => window.location.reload()}>Try Again</Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen py-8 px-4">
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
+          <Button
+            variant="ghost"
+            onClick={() => navigate("/dashboard")}
+            className="mb-4"
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Dashboard
+          </Button>
           <h1 className="text-3xl font-heading font-bold text-primary mb-2">Advisory Details</h1>
           <p className="text-muted-foreground">Personalized recommendations based on your farm data</p>
         </div>
@@ -36,58 +128,125 @@ const Advisory = () => {
         {/* Main Advisory Card */}
         <Card className="p-6 mb-6 shadow-hover bg-gradient-card">
           <div className="flex items-start justify-between mb-4">
-            <div>
-              <Badge variant="destructive" className="mb-2">High Priority</Badge>
-              <h2 className="text-2xl font-heading font-bold mb-2">Pest Warning - Cotton Crop</h2>
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-2">
+                <Badge variant={getPriorityVariant(advisory.priority)} className="mb-2">
+                  {advisory.priority} Priority
+                </Badge>
+                <Badge variant="outline" className="mb-2">
+                  {advisory.severity} Severity
+                </Badge>
+              </div>
+              <h2 className="text-2xl font-heading font-bold mb-2">
+                {advisory.crop} Crop Advisory
+              </h2>
               <p className="text-muted-foreground">
-                Detected on March 15, 2024 • Confidence: 87%
+                Last updated: {formatDate(advisory.last_updated)}
+                {advisory.rule_score > 0 && ` • Confidence: ${Math.round(advisory.rule_score * 100)}%`}
               </p>
             </div>
           </div>
 
           <div className="prose prose-sm max-w-none mb-6">
             <h3 className="font-semibold text-lg mb-2">Analysis</h3>
-            <p className="text-muted-foreground mb-4">
-              Based on NDVI analysis and recent humidity patterns, there's a high probability of aphid
-              infestation in your cotton field. Early intervention is crucial to prevent crop damage.
-            </p>
+            <p className="text-muted-foreground mb-4">{advisory.analysis}</p>
+
+            {/* Fired Rules */}
+            {advisory.fired_rules && advisory.fired_rules.length > 0 && (
+              <div className="mb-4">
+                <h3 className="font-semibold text-lg mb-2">Triggered Rules</h3>
+                <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+                  {advisory.fired_rules.map((rule, idx) => (
+                    <li key={idx} className="text-sm">{rule}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             <h3 className="font-semibold text-lg mb-2">Recommended Actions</h3>
           </div>
 
           <div className="space-y-4 mb-6">
-            {recommendations.map((rec, idx) => (
-              <div
-                key={idx}
-                className="flex items-start gap-4 p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
-              >
-                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                  <rec.icon className="h-5 w-5 text-primary" />
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h4 className="font-semibold">{rec.title}</h4>
-                    <Badge
-                      variant={
-                        rec.priority === "high"
-                          ? "destructive"
-                          : rec.priority === "medium"
-                          ? "default"
-                          : "secondary"
-                      }
-                      className="text-xs"
-                    >
-                      {rec.priority}
-                    </Badge>
+            {advisory.recommendations && advisory.recommendations.length > 0 ? (
+              advisory.recommendations.map((rec: Recommendation, idx: number) => {
+                const Icon = getRecommendationIcon(rec.title);
+                return (
+                  <div
+                    key={idx}
+                    className="flex items-start gap-4 p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+                  >
+                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <Icon className="h-5 w-5 text-primary" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h4 className="font-semibold">{rec.title}</h4>
+                        <Badge
+                          variant={getPriorityVariant(rec.priority)}
+                          className="text-xs"
+                        >
+                          {rec.priority}
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground">{rec.desc}</p>
+                      {rec.timeline && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Timeline: {rec.timeline}
+                        </p>
+                      )}
+                    </div>
+                    <Button size="sm" variant="ghost">
+                      <CheckCircle className="h-4 w-4" />
+                    </Button>
                   </div>
-                  <p className="text-sm text-muted-foreground">{rec.description}</p>
-                </div>
-                <Button size="sm" variant="ghost">
-                  <CheckCircle className="h-4 w-4" />
-                </Button>
-              </div>
-            ))}
+                );
+              })
+            ) : (
+              <p className="text-sm text-muted-foreground">No specific recommendations at this time.</p>
+            )}
           </div>
+
+          {/* Rule Breakdown */}
+          {advisory.rule_breakdown && (
+            <div className="mb-6 p-4 bg-muted/30 rounded-lg">
+              <h3 className="font-semibold text-sm mb-3">Rule Breakdown</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                <div>
+                  <p className="text-muted-foreground mb-1">Pest Detection</p>
+                  <p className="font-medium">
+                    Score: {Math.round(advisory.rule_breakdown.pest.score * 100)}%
+                  </p>
+                  {advisory.rule_breakdown.pest.fired.length > 0 && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {advisory.rule_breakdown.pest.fired.length} rule(s) triggered
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <p className="text-muted-foreground mb-1">Irrigation</p>
+                  <p className="font-medium">
+                    Score: {Math.round(advisory.rule_breakdown.irrigation.score * 100)}%
+                  </p>
+                  {advisory.rule_breakdown.irrigation.fired.length > 0 && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {advisory.rule_breakdown.irrigation.fired.length} rule(s) triggered
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <p className="text-muted-foreground mb-1">Market</p>
+                  <p className="font-medium">
+                    Score: {Math.round(advisory.rule_breakdown.market.score * 100)}%
+                  </p>
+                  {advisory.rule_breakdown.market.fired.length > 0 && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {advisory.rule_breakdown.market.fired.length} rule(s) triggered
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="flex flex-col sm:flex-row gap-3">
             <Button className="flex-1 bg-primary hover:bg-primary/90">
@@ -105,9 +264,24 @@ const Advisory = () => {
         {/* Explainability Note */}
         <Card className="p-4 bg-info/10 border-info/20">
           <p className="text-sm text-foreground">
-            <strong>How we determined this:</strong> This advisory is based on a combination of satellite
-            NDVI data showing decreased vegetation health, high humidity levels (65%+) in your region, and
-            historical pest patterns in similar conditions.
+            <strong>How we determined this:</strong>{" "}
+            {advisory.data_sources ? (
+              <>
+                This advisory is based on a combination of {advisory.data_sources.weather} weather data,{" "}
+                {advisory.data_sources.satellite} satellite imagery (NDVI), and{" "}
+                {advisory.data_sources.market} market prices. The rule-based engine evaluated multiple
+                conditions including temperature, humidity, soil moisture, NDVI changes, and market trends
+                to generate these recommendations.
+              </>
+            ) : (
+              "This advisory is based on a combination of weather data, satellite imagery (NDVI), and market prices. The rule-based engine evaluated multiple conditions to generate these recommendations."
+            )}
+            {advisory.fired_rules && advisory.fired_rules.length > 0 && (
+              <>
+                {" "}The following rules were triggered: {advisory.fired_rules.slice(0, 2).join(", ")}
+                {advisory.fired_rules.length > 2 && " and more."}
+              </>
+            )}
           </p>
         </Card>
       </div>
