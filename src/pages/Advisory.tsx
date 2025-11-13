@@ -153,14 +153,25 @@ const Advisory = () => {
     return <LoadingSkeleton />;
   }
 
-  // Error state
-  if (error || !advisory) {
+  // Minimal guard to avoid crashes if advisory missing
+  if (!advisory) return <div className="p-10 text-center text-lg">Loading advisory...</div>;
+
+  // Safe fallbacks for scores
+  const pestScore = advisory?.rule_breakdown?.pest?.score || 0;
+  const irrigationScore = advisory?.rule_breakdown?.irrigation?.score || 0;
+  const marketScore = advisory?.rule_breakdown?.market?.score || 0;
+  const pestFired = advisory?.rule_breakdown?.pest?.fired?.length || 0;
+  const irrigationFired = advisory?.rule_breakdown?.irrigation?.fired?.length || 0;
+  const marketFired = advisory?.rule_breakdown?.market?.fired?.length || 0;
+
+  // Error state (kept for other errors)
+  if (error) {
     return (
       <div className="min-h-screen py-8 px-4 flex items-center justify-center">
         <div className="text-center max-w-md">
           <AlertTriangle className="h-12 w-12 mx-auto mb-4 text-destructive" />
           <h2 className="text-2xl font-bold mb-2">Unable to Load Advisory</h2>
-          <p className="text-muted-foreground mb-4">{error || "Advisory data not available"}</p>
+          <p className="text-muted-foreground mb-4">{error}</p>
           <div className="flex gap-2 justify-center">
             <Button onClick={() => navigate("/dashboard")} variant="outline">
               <ArrowLeft className="h-4 w-4 mr-2" />
@@ -292,41 +303,29 @@ const Advisory = () => {
           </div>
 
           {/* Rule Breakdown */}
-          {advisory.rule_breakdown && (
+          {advisory?.rule_breakdown && (
             <div className="mb-6 p-4 bg-muted/30 rounded-lg">
               <h3 className="font-semibold text-sm mb-3">Rule Breakdown</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                 <div>
                   <p className="text-muted-foreground mb-1">Pest Detection</p>
-                  <p className="font-medium">
-                    Score: {Math.round(advisory.rule_breakdown.pest.score * 100)}%
-                  </p>
-                  {advisory.rule_breakdown.pest.fired.length > 0 && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {advisory.rule_breakdown.pest.fired.length} rule(s) triggered
-                    </p>
+                  <p className="font-medium">Score: {Math.round(pestScore * 100)}%</p>
+                  {pestFired > 0 && (
+                    <p className="text-xs text-muted-foreground mt-1">{pestFired} rule(s) triggered</p>
                   )}
                 </div>
                 <div>
                   <p className="text-muted-foreground mb-1">Irrigation</p>
-                  <p className="font-medium">
-                    Score: {Math.round(advisory.rule_breakdown.irrigation.score * 100)}%
-                  </p>
-                  {advisory.rule_breakdown.irrigation.fired.length > 0 && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {advisory.rule_breakdown.irrigation.fired.length} rule(s) triggered
-                    </p>
+                  <p className="font-medium">Score: {Math.round(irrigationScore * 100)}%</p>
+                  {irrigationFired > 0 && (
+                    <p className="text-xs text-muted-foreground mt-1">{irrigationFired} rule(s) triggered</p>
                   )}
                 </div>
                 <div>
                   <p className="text-muted-foreground mb-1">Market</p>
-                  <p className="font-medium">
-                    Score: {Math.round(advisory.rule_breakdown.market.score * 100)}%
-                  </p>
-                  {advisory.rule_breakdown.market.fired.length > 0 && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {advisory.rule_breakdown.market.fired.length} rule(s) triggered
-                    </p>
+                  <p className="font-medium">Score: {Math.round(marketScore * 100)}%</p>
+                  {marketFired > 0 && (
+                    <p className="text-xs text-muted-foreground mt-1">{marketFired} rule(s) triggered</p>
                   )}
                 </div>
               </div>

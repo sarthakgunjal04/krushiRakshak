@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 import json
 import os
 import sys
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
 
 # Add backend directory to path for imports
 BACKEND_DIR = os.path.dirname(os.path.dirname(__file__))
@@ -22,6 +22,7 @@ router = APIRouter(prefix="/fusion", tags=["Fusion Engine"])
 # Get the backend directory path (already set above)
 DATA_PATH = os.path.join(BACKEND_DIR, "data")
 RULES_PATH = os.path.join(BACKEND_DIR, "rules")
+MOCK_PATH = os.path.join(os.path.dirname(__file__), "mock_data")
 
 
 def load_json_file(file_path: str) -> Dict[str, Any]:
@@ -33,6 +34,68 @@ def load_json_file(file_path: str) -> Dict[str, Any]:
         return {}
     except json.JSONDecodeError as e:
         raise HTTPException(status_code=500, detail=f"Invalid JSON in {file_path}: {str(e)}")
+
+
+def load_crop_mock(crop_name: str) -> Dict[str, Any]:
+    """Load mock data JSON for a given crop if available."""
+    filename = f"{crop_name.lower()}.json"
+    file_path = os.path.join(MOCK_PATH, filename)
+    if os.path.exists(file_path):
+        return load_json_file(file_path)
+    return {}
+
+
+def build_advisory_from_features(crop: str, features: Dict[str, Any]) -> Tuple[Dict[str, Any], float, List[str]]:
+    """Evaluate rules and produce an advisory summary, severity, alerts, and metrics.
+    Returns advisory fields plus max score and fired rules for compatibility.
+    """
+    # Evaluate rules
+    pest_rules = load_rules("pest")
+    irrigation_rules = load_rules("irrigation")
+    market_rules = load_rules("market")
+
+    fired_pest, pest_score = evaluate_rules(pest_rules, features)
+    fired_irrigation, irrigation_score = evaluate_rules(irrigation_rules, features)
+    fired_market, market_score = evaluate_rules(market_rules, features)
+
+    max_score = max(pest_score, irrigation_score, market_score, 0.0)
+
+    # Severity mapping
+    if max_score >= 0.8:
+        severity = "high"
+        summary = "High risk detected"
+    elif max_score >= 0.6:
+        severity = "medium"
+        summary = "Moderate risk detected"
+    else:
+        severity = "low"
+        summary = "Low risk detected"
+
+    alerts: List[Dict[str, str]] = []
+    for msg in fired_pest:
+        alerts.append({"type": "pest", "message": msg})
+    for msg in fired_irrigation:
+        alerts.append({"type": "soil", "message": msg})
+    for msg in fired_market:
+        alerts.append({"type": "market", "message": msg})
+
+    metrics = {
+        "ndvi": features.get("ndvi"),
+        "soil_moisture": features.get("soil_moisture"),
+        "market_price": features.get("price_change_percent") if features.get("price_change_percent") is not None else None,
+        "temperature": features.get("temperature"),
+        "humidity": features.get("humidity"),
+        "rainfall": features.get("rainfall"),
+    }
+
+    advisory_fields = {
+        "summary": summary,
+        "severity": severity,
+        "alerts": alerts,
+        "metrics": metrics,
+    }
+
+    return advisory_fields, max_score, (fired_pest + fired_irrigation + fired_market)
 
 
 @router.get("/dashboard")
@@ -91,36 +154,65 @@ async def get_advisory(crop_name: str):
     """
     Fetch rule-based advisory for given crop.
     
-    Combines weather, crop health, and market data to generate:
-    - Analysis based on fired rules
-    - Priority and severity
-    - Actionable recommendations
-    - Explainable results (which rules triggered)
-    
-    Args:
-        crop_name: Name of the crop (e.g., "cotton", "wheat", "rice")
-    
-    Returns:
-        Advisory JSON with recommendations and rule explanations
+    Now loads per-crop mock data if available, applies rules, and returns:
+    {
+      "summary": str,
+      "severity": "low|medium|high",
+      "alerts": [ {"type": "pest|soil|market", "message": str}, ... ],
+      "metrics": { ndvi, soil_moisture, market_price, temperature, humidity, rainfall },
+      // plus legacy fields maintained for compatibility
+    }
     """
     try:
-        crop_name_lower = crop_name.lower()
-        
-        # Check if pre-generated advisory exists
-        advisory_file = os.path.join(DATA_PATH, f"advisory_{crop_name_lower}.json")
-        
-        if os.path.exists(advisory_file):
-            advisory = load_json_file(advisory_file)
-            
-            # Enhance with real-time rule evaluation
-            advisory = await enhance_advisory_with_rules(advisory, crop_name_lower)
-            
-            return JSONResponse(advisory)
-        
-        # Generate advisory dynamically if no pre-generated file exists
-        advisory = await generate_advisory(crop_name_lower)
+        crop = crop_name.lower()
+
+        # Load mock crop data if present
+        mock = load_crop_mock(crop)
+        if mock:
+            # Build features directly from mock
+            features = {
+                "temperature": mock.get("temperature"),
+                "humidity": mock.get("humidity"),
+                "rainfall": mock.get("rainfall"),
+                "ndvi": mock.get("ndvi"),
+                "ndvi_change": 0.0,  # mock may not include change
+                "soil_moisture": mock.get("soil_moisture"),
+                "crop_stage": "unknown",
+                "price_change_percent": 0,  # not provided in mock
+            }
+
+            advisory_fields, max_score, fired_rules = build_advisory_from_features(crop, features)
+
+            # Compose response including legacy fields
+            legacy_priority = "High" if advisory_fields["severity"] == "high" else ("Medium" if advisory_fields["severity"] == "medium" else "Low")
+            response = {
+                "crop": crop.capitalize(),
+                "analysis": advisory_fields["summary"],
+                "priority": legacy_priority,
+                "severity": advisory_fields["severity"].capitalize(),
+                "rule_score": max_score,
+                "fired_rules": fired_rules,
+                "recommendations": [],  # keep structure; real recs come from rules if needed
+                "rule_breakdown": {},
+                "data_sources": {"weather": "IMD", "satellite": "Bhuvan", "market": "Agmarknet"},
+                "last_updated": "recently",
+                # New fields for UI
+                "summary": advisory_fields["summary"],
+                "alerts": advisory_fields["alerts"],
+                "metrics": advisory_fields["metrics"],
+            }
+            return JSONResponse(response)
+
+        # Fallback to previous dynamic generation if no mock available
+        advisory = await generate_advisory(crop)
+
+        # Also attach new fields synthesized from features where possible (minimal)
+        advisory.setdefault("summary", advisory.get("analysis", ""))
+        advisory.setdefault("alerts", [])
+        advisory.setdefault("metrics", {})
+
         return JSONResponse(advisory)
-        
+
     except HTTPException:
         raise
     except Exception as e:

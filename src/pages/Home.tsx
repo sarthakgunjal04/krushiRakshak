@@ -109,7 +109,7 @@ const Home = () => {
             {authenticated ? (
               <Link to="/dashboard">Go to Dashboard</Link>
             ) : (
-              <Link to="/signup">Create Free Account</Link>
+            <Link to="/signup">Create Free Account</Link>
             )}
           </Button>
         </div>
