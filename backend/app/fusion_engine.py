@@ -36,15 +36,19 @@ def load_json_file(file_path: str) -> Dict[str, Any]:
 
 
 @router.get("/dashboard")
-async def get_dashboard_data():
+async def get_dashboard_data(crop: str = None):
     """
     Combine weather, market, and alert mock data for dashboard.
+    
+    Query params:
+    - crop: Optional crop name to highlight/filter (e.g., cotton, wheat, rice)
     
     Returns combined overview with:
     - Weather data (temperature, humidity, rainfall, wind)
     - Market prices (wheat, rice, cotton, etc.)
     - Active alerts (pest, irrigation, market)
     - Crop health summary
+    - user_crop: The crop parameter if provided
     """
     try:
         # Load data files
@@ -60,7 +64,7 @@ async def get_dashboard_data():
             if isinstance(alert, dict) and alert.get("level") == "high"
         ] if isinstance(alerts, list) else []
         
-        return JSONResponse({
+        response_data = {
             "weather": weather,
             "market": market,
             "alerts": alerts,
@@ -71,7 +75,13 @@ async def get_dashboard_data():
                 "crops_monitored": len(crop_health) if isinstance(crop_health, dict) else 0
             },
             "timestamp": weather.get("timestamp", "2025-11-10T16:00:00Z")
-        })
+        }
+        
+        # Add user's crop if provided
+        if crop:
+            response_data["user_crop"] = crop.lower()
+        
+        return JSONResponse(response_data)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error loading dashboard data: {str(e)}")
 

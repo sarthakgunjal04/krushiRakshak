@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CloudRain, TrendingUp, Satellite, AlertTriangle, RefreshCw, Sprout, Loader2 } from "lucide-react";
-import { getDashboardData } from "@/services/api";
+import { getDashboardData, getCurrentUser } from "@/services/api";
 import type { DashboardResponse, Alert } from "@/types/fusion";
 import { useNavigate } from "react-router-dom";
 
@@ -12,13 +12,30 @@ const Dashboard = () => {
   const [dashboardData, setDashboardData] = useState<DashboardResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [userCrop, setUserCrop] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    // Load user profile to get crop
+    const loadUserProfile = async () => {
+      try {
+        const user = await getCurrentUser();
+        if (user.crop) {
+          setUserCrop(user.crop);
+        }
+      } catch (err) {
+        // Silently fail - user might not be logged in
+        console.log("Could not load user profile");
+      }
+    };
+    loadUserProfile();
+  }, []);
 
   const fetchDashboardData = async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await getDashboardData();
+      const data = await getDashboardData(userCrop || undefined);
       setDashboardData(data);
     } catch (err: any) {
       setError(err.message || "Unable to load dashboard data");
@@ -29,7 +46,7 @@ const Dashboard = () => {
 
   useEffect(() => {
     fetchDashboardData();
-  }, []);
+  }, [userCrop]);
 
   const handleRefresh = () => {
     fetchDashboardData();
@@ -282,10 +299,17 @@ const Dashboard = () => {
                 const healthScore = health.health_score || 0;
                 const healthColor = healthScore >= 80 ? "text-success" : healthScore >= 60 ? "text-warning" : "text-destructive";
                 const healthStatus = healthScore >= 80 ? "Good" : healthScore >= 60 ? "Warning" : "Risk";
+                const isUserCrop = userCrop && cropName.toLowerCase() === userCrop.toLowerCase();
                 return (
-                  <Card key={cropName} className="p-4 hover:shadow-hover transition-all">
+                  <Card 
+                    key={cropName} 
+                    className={`p-4 hover:shadow-hover transition-all ${isUserCrop ? "ring-2 ring-primary" : ""}`}
+                  >
                     <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-semibold capitalize">{cropName}</h4>
+                      <h4 className="font-semibold capitalize">
+                        {cropName}
+                        {isUserCrop && <span className="ml-2 text-xs text-primary">(Your Crop)</span>}
+                      </h4>
                       <Badge variant={healthScore >= 80 ? "default" : healthScore >= 60 ? "secondary" : "destructive"}>
                         {healthStatus}
                       </Badge>

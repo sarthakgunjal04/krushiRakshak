@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Download, CheckCircle, Droplets, Sprout, Eye, Loader2, AlertTriangle, ArrowLeft } from "lucide-react";
-import { getAdvisory } from "@/services/api";
+import { getAdvisory, getCurrentUser } from "@/services/api";
 import type { AdvisoryResponse, Recommendation } from "@/types/fusion";
 
 const AVAILABLE_CROPS = [
@@ -31,6 +31,23 @@ const Advisory = () => {
   const [advisory, setAdvisory] = useState<AdvisoryResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Load user's crop on mount if no crop param
+  useEffect(() => {
+    const loadUserCrop = async () => {
+      if (!cropParam) {
+        try {
+          const user = await getCurrentUser();
+          if (user.crop) {
+            setSelectedCrop(user.crop);
+          }
+        } catch (err) {
+          // Silently fail - default to cotton
+        }
+      }
+    };
+    loadUserCrop();
+  }, [cropParam]);
 
   useEffect(() => {
     // Update selected crop from URL param if it changes

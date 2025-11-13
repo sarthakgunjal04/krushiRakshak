@@ -78,6 +78,15 @@ export interface User {
   email: string;
   phone?: string;
   userType: string;
+  crop?: string;
+  location?: string;
+}
+
+export interface UserUpdate {
+  name?: string;
+  phone?: string;
+  crop?: string;
+  location?: string;
 }
 
 export interface AuthResponse {
@@ -204,13 +213,14 @@ export const getUser = (): User | null => {
 // Get current user profile from backend
 export const getCurrentUser = async (): Promise<User> => {
   try {
-    const user = getUser();
-    if (!user) {
-      throw new Error("No user data found");
+    // Use /auth/me endpoint which requires authentication
+    const response = await api.get<User>("/auth/me");
+    
+    // Update localStorage with fresh data
+    if (response.data) {
+      localStorage.setItem("user_data", JSON.stringify(response.data));
     }
     
-    // Try to get user from backend by email
-    const response = await api.get<User>(`/auth/user?email=${encodeURIComponent(user.email)}`);
     return response.data;
   } catch (error: any) {
     // Fallback to stored user data if backend call fails
@@ -230,17 +240,52 @@ export const getCurrentUser = async (): Promise<User> => {
   }
 };
 
+// Update user profile
+export const updateProfile = async (userData: UserUpdate): Promise<User> => {
+  try {
+    const response = await api.patch<User>("/auth/profile", userData);
+    
+    // Update localStorage with fresh data
+    if (response.data) {
+      localStorage.setItem("user_data", JSON.stringify(response.data));
+    }
+    
+    return response.data;
+  } catch (error: any) {
+    if (error.response) {
+      const status = error.response.status;
+      const detail = error.response.data?.detail || error.response.data?.message;
+      
+      if (status === 401) {
+        throw new Error("Unauthorized. Please log in again.");
+      } else if (status === 404) {
+        throw new Error("User not found.");
+      } else if (status === 500) {
+        throw new Error("Server error. Please try again later.");
+      } else {
+        throw new Error(detail || "Failed to update profile. Please try again.");
+      }
+    } else if (error.request) {
+      throw new Error("Unable to reach server. Please check your internet connection and try again.");
+    } else {
+      throw new Error(error.message || "An unexpected error occurred while updating profile.");
+    }
+  }
+};
+
 // ============================================================================
 // Fusion Engine API Functions
 // ============================================================================
 
 /**
  * Fetch dashboard data from Fusion Engine
+ * @param crop - Optional crop name to filter/highlight
  * Returns weather, market prices, alerts, and crop health data
  */
-export const getDashboardData = async (): Promise<DashboardResponse> => {
+export const getDashboardData = async (crop?: string): Promise<DashboardResponse> => {
   try {
-    const response = await api.get<DashboardResponse>("/fusion/dashboard");
+    const url = crop ? `/fusion/dashboard?crop=${encodeURIComponent(crop)}` : "/fusion/dashboard";
+    const response = await api.get<DashboardResponse>(url);
     return response.data;
   } catch (error: any) {
     if (error.response) {
