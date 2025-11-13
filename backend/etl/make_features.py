@@ -64,6 +64,11 @@ def evaluate_rules(rules: Dict[str, Any], features: Dict[str, Any]) -> Tuple[Lis
                 if not (feature_val != threshold):
                     match = False
                     break
+            elif operator == "abs_gte":
+                # Absolute value greater than or equal to threshold
+                if not (abs(feature_val) >= threshold):
+                    match = False
+                    break
         
         # If all conditions matched, rule is fired
         if match:

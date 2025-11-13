@@ -1,0 +1,67 @@
+{
+  "cotton": {
+    "name": "Cotton",
+    "scientific_name": "Gossypium hirsutum",
+    "season": "kharif",
+    "growing_period_days": 150,
+    "optimal_temperature_min": 20,
+    "optimal_temperature_max": 35,
+    "optimal_humidity_min": 50,
+    "optimal_humidity_max": 80,
+    "optimal_soil_moisture_min": 40,
+    "optimal_soil_moisture_max": 70,
+    "common_pests": ["aphids", "whitefly", "bollworm"],
+    "common_diseases": ["bacterial blight", "leaf spot"],
+    "irrigation_frequency_days": 7,
+    "harvest_months": ["October", "November", "December"]
+  },
+  "wheat": {
+    "name": "Wheat",
+    "scientific_name": "Triticum aestivum",
+    "season": "rabi",
+    "growing_period_days": 120,
+    "optimal_temperature_min": 15,
+    "optimal_temperature_max": 25,
+    "optimal_humidity_min": 40,
+    "optimal_humidity_max": 70,
+    "optimal_soil_moisture_min": 35,
+    "optimal_soil_moisture_max": 60,
+    "common_pests": ["aphids", "armyworm", "thrips"],
+    "common_diseases": ["rust", "smut", "powdery mildew"],
+    "irrigation_frequency_days": 10,
+    "harvest_months": ["March", "April", "May"]
+  },
+  "rice": {
+    "name": "Rice",
+    "scientific_name": "Oryza sativa",
+    "season": "kharif",
+    "growing_period_days": 120,
+    "optimal_temperature_min": 20,
+    "optimal_temperature_max": 30,
+    "optimal_humidity_min": 60,
+    "optimal_humidity_max": 90,
+    "optimal_soil_moisture_min": 50,
+    "optimal_soil_moisture_max": 80,
+    "common_pests": ["stem borer", "leaf folder", "brown planthopper"],
+    "common_diseases": ["blast", "brown spot", "bacterial blight"],
+    "irrigation_frequency_days": 3,
+    "harvest_months": ["September", "October", "November"]
+  },
+  "sugarcane": {
+    "name": "Sugarcane",
+    "scientific_name": "Saccharum officinarum",
+    "season": "year_round",
+    "growing_period_days": 365,
+    "optimal_temperature_min": 25,
+    "optimal_temperature_max": 35,
+    "optimal_humidity_min": 50,
+    "optimal_humidity_max": 85,
+    "optimal_soil_moisture_min": 45,
+    "optimal_soil_moisture_max": 75,
+    "common_pests": ["top borer", "internode borer", "white grub"],
+    "common_diseases": ["red rot", "smut", "mosaic"],
+    "irrigation_frequency_days": 5,
+    "harvest_months": ["December", "January", "February", "March"]
+  }
+}
+
