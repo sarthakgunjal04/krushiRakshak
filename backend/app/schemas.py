@@ -18,6 +18,11 @@ class UserCreate(UserBase):
     userType: str = Field(alias="userType")
     crop: Optional[str] = None
     location: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    state: Optional[str] = None
+    district: Optional[str] = None
+    village: Optional[str] = None
 
     class Config:
         populate_by_name = True
@@ -34,6 +39,9 @@ class UserUpdate(BaseModel):
     phone: Optional[str] = None
     crop: Optional[str] = None
     location: Optional[str] = None
+    state: Optional[str] = None
+    district: Optional[str] = None
+    village: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -45,6 +53,9 @@ class UserOut(UserBase):
     userType: Optional[str] = None
     crop: Optional[str] = None
     location: Optional[str] = None
+    state: Optional[str] = None
+    district: Optional[str] = None
+    village: Optional[str] = None
     is_active: bool
 
     class Config:

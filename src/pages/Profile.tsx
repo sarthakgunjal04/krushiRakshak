@@ -21,6 +21,9 @@ const Profile = () => {
     userType: "",
     crop: "",
     location: "",
+    state: "",
+    district: "",
+    village: "",
   });
   const [isSaving, setIsSaving] = useState(false);
   const navigate = useNavigate();
@@ -46,6 +49,9 @@ const Profile = () => {
           userType: userData.userType || "",
           crop: userData.crop || "",
           location: userData.location || "",
+          state: userData.state || "",
+          district: userData.district || "",
+          village: userData.village || "",
         });
       } catch (error: any) {
         // Fallback to stored user data
@@ -59,6 +65,9 @@ const Profile = () => {
             userType: storedUser.userType || "",
             crop: storedUser.crop || "",
             location: storedUser.location || "",
+            state: storedUser.state || "",
+            district: storedUser.district || "",
+            village: storedUser.village || "",
           });
         } else {
           toast.error("Failed to load user data");
@@ -220,6 +229,21 @@ const Profile = () => {
                     <MapPin className="h-4 w-4" />
                   </Button>
                 </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="space-y-2">
+                <Label htmlFor="state">State</Label>
+                <Input id="state" value={formData.state} disabled className="bg-muted" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="district">District</Label>
+                <Input id="district" value={formData.district} disabled className="bg-muted" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="village">Village / Town</Label>
+                <Input id="village" value={formData.village} disabled className="bg-muted" />
               </div>
             </div>
 

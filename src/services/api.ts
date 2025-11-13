@@ -71,6 +71,8 @@ export interface SignupData {
   email: string;
   password: string;
   userType: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 export interface User {
@@ -80,6 +82,9 @@ export interface User {
   userType: string;
   crop?: string;
   location?: string;
+  state?: string;
+  district?: string;
+  village?: string;
 }
 
 export interface UserUpdate {
@@ -87,6 +92,9 @@ export interface UserUpdate {
   phone?: string;
   crop?: string;
   location?: string;
+  state?: string;
+  district?: string;
+  village?: string;
 }
 
 export interface AuthResponse {

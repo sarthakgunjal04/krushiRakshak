@@ -27,6 +27,9 @@ def create_user(db: Session, user: schemas.UserCreate):
         user_type=user.userType,
         crop=user.crop,
         location=user.location,
+        state=user.state,
+        district=user.district,
+        village=user.village,
         hashed_password=hashed_password
     )
     db.add(db_user)

@@ -18,6 +18,7 @@ from dotenv import load_dotenv
 
 from . import schemas, crud
 from .database import get_db
+from .services.geocode import reverse_geocode
 
 load_dotenv()
 
@@ -74,7 +75,21 @@ async def signup(user_in: schemas.UserCreate, db: Session = Depends(get_db)):
     existing = crud.get_user_by_email(db, user_in.email)
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
-    user = crud.create_user(db, user_in)
+
+    user_data = user_in.model_dump()
+    lat = user_data.pop("latitude", None)
+    lon = user_data.pop("longitude", None)
+
+    if lat is not None and lon is not None:
+        geo = await reverse_geocode(lat, lon)
+        for key in ("state", "district", "village"):
+            if geo.get(key):
+                user_data[key] = geo[key]
+        # Persist raw coordinates in location field if not provided
+        if not user_data.get("location"):
+            user_data["location"] = f"{lat},{lon}"
+
+    user = crud.create_user(db, schemas.UserCreate(**user_data))
     return {
         "id": user.id,
         "email": user.email,
@@ -83,6 +98,9 @@ async def signup(user_in: schemas.UserCreate, db: Session = Depends(get_db)):
         "userType": user.user_type,
         "crop": user.crop,
         "location": user.location,
+        "state": user.state,
+        "district": user.district,
+        "village": user.village,
         "is_active": user.is_active,
     }
 
@@ -107,6 +125,9 @@ async def login(payload: schemas.UserLogin, db: Session = Depends(get_db)):
         "userType": user.user_type,
         "crop": user.crop,
         "location": user.location,
+        "state": user.state,
+        "district": user.district,
+        "village": user.village,
         "is_active": user.is_active,
     }}
 
@@ -125,6 +146,9 @@ async def me(current_user=Depends(get_current_user), db: Session = Depends(get_d
         "userType": current_user.user_type,
         "crop": current_user.crop,
         "location": current_user.location,
+        "state": current_user.state,
+        "district": current_user.district,
+        "village": current_user.village,
         "is_active": current_user.is_active,
     }
 
@@ -151,5 +175,8 @@ async def update_profile(
         "userType": updated_user.user_type,
         "crop": updated_user.crop,
         "location": updated_user.location,
+        "state": updated_user.state,
+        "district": updated_user.district,
+        "village": updated_user.village,
         "is_active": updated_user.is_active,
     }

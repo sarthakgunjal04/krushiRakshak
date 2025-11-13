@@ -18,5 +18,8 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     crop = Column(String, nullable=True)  # Primary crop (cotton, wheat, rice, etc.)
     location = Column(String, nullable=True)  # Farm location
+    state = Column(String, nullable=True)
+    district = Column(String, nullable=True)
+    village = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
