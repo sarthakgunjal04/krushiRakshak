@@ -9,8 +9,9 @@ from fastapi.responses import JSONResponse
 import json
 import os
 import sys
-from typing import Dict, Any, List, Tuple, Optional
+import asyncio
 from datetime import datetime, timezone
+from typing import Dict, Any, List, Tuple, Optional
 
 # Add backend directory to path for imports
 BACKEND_DIR = os.path.dirname(os.path.dirname(__file__))
@@ -22,6 +23,8 @@ from app.services.crop_stage import detect_crop_stage
 from app.services.ndvi_utils import ndvi_stress_level, compute_ndvi_change
 from app.services.weather import get_realtime_weather
 from app.services.geocode import reverse_geocode
+from app.services.ndvi_synthetic import synthetic_ndvi, synthetic_ndvi_history
+from app.services.market_service import fetch_market_price
 
 router = APIRouter(prefix="/fusion", tags=["Fusion Engine"])
 
@@ -138,6 +141,17 @@ def _load_weather_from_fallback(fallback_data: Dict[str, Any], lat: float, lon: 
     result.setdefault("location", f"{lat},{lon}")
     result.setdefault("timestamp", datetime.now(timezone.utc).isoformat())
     return result
+
+
+async def fetch_ndvi_context(lat: float, lon: float, crop: str = "cotton"):
+    latest = synthetic_ndvi(lat, lon, crop)
+    history = synthetic_ndvi_history(lat, lon, crop, days=7)
+
+    ndvi_change = None
+    if len(history) >= 2:
+        ndvi_change = round(history[-1]["ndvi"] - history[-2]["ndvi"], 4)
+
+    return latest, ndvi_change, history
 
 
 def load_crop_mock(crop_name: str) -> Dict[str, Any]:
@@ -264,6 +278,9 @@ def build_advisory_from_features(
     if user_context:
         context.update(user_context)
 
+    if context.get("ndvi_change") is None:
+        context.pop("ndvi_change", None)
+
     ndvi_current = context.get("ndvi")
     previous_ndvi = (
         context.get("previous_ndvi")
@@ -271,9 +288,9 @@ def build_advisory_from_features(
         or context.get("ndvi_prior")
     )
     computed_change = compute_ndvi_change(ndvi_current, previous_ndvi)
-    if computed_change != 0:
+    if "ndvi_change" not in context and computed_change != 0:
         context["ndvi_change"] = computed_change
-    elif "ndvi_change" not in context:
+    if "ndvi_change" not in context:
         context["ndvi_change"] = 0.0
 
     context["ndvi_status"] = ndvi_stress_level(crop_meta, ndvi_current)
@@ -324,6 +341,7 @@ def build_advisory_from_features(
 
     metrics = {
         "ndvi": ndvi_current,
+        "ndvi_change": context.get("ndvi_change"),
         "soil_moisture": context.get("soil_moisture"),
         "market_price": context.get("market_price") or context.get("price"),
         "temperature": context.get("temperature"),
@@ -364,7 +382,18 @@ async def get_dashboard_data(
             district=district,
             village=village,
         )
-        market = load_json_file(os.path.join(DATA_PATH, "market_prices.json"))
+        crop_name_for_ndvi = crop.lower() if crop else "cotton"
+        ndvi_latest, ndvi_change, ndvi_history = await fetch_ndvi_context(lat, lon, crop_name_for_ndvi)
+        
+        # Fetch real market prices with fallback
+        market_data = {}
+        if crop:
+            market_price_data = await fetch_market_price(crop, geo_info.get("district"))
+            market_data[crop.lower()] = market_price_data
+        else:
+            # Load all crops from fallback if no specific crop
+            market_data = load_json_file(os.path.join(DATA_PATH, "market_prices.json"))
+        
         alerts = load_json_file(os.path.join(DATA_PATH, "alerts.json"))
         crop_health = load_json_file(os.path.join(DATA_PATH, "crop_health.json"))
 
@@ -376,9 +405,14 @@ async def get_dashboard_data(
 
         response_data = {
             "weather": weather,
-            "market": market,
+            "market": market_data,
             "alerts": alerts,
             "crop_health": crop_health,
+            "ndvi": {
+                "latest": ndvi_latest,
+                "change": ndvi_change,
+                "history": ndvi_history,
+            },
             "summary": {
                 "total_alerts": total_alerts,
                 "high_priority_count": len(high_priority_alerts),
@@ -419,14 +453,19 @@ async def get_advisory(
             district=district,
             village=village,
         )
+        ndvi_latest, ndvi_change, ndvi_history = await fetch_ndvi_context(lat, lon, crop)
         user_context = {
-            "user_district": geo_info.get("district") or district,
-            "district": geo_info.get("district") or district,
-            "state": geo_info.get("state") or state,
-            "village": geo_info.get("village") or village,
+            "user_district": geo_info.get("district"),
+            "district": geo_info.get("district"),
+            "state": geo_info.get("state"),
             "location": weather.get("location"),
+            "ndvi": ndvi_latest,
+            "ndvi_change": ndvi_change,
         }
 
+        # Fetch real market price
+        market = await fetch_market_price(crop, geo_info.get("district"))
+        
         mock = load_crop_mock(crop)
         if mock:
             features = {
@@ -434,13 +473,21 @@ async def get_advisory(
                 "humidity": weather.get("humidity"),
                 "rainfall": weather.get("rainfall"),
                 "wind_speed": weather.get("wind_speed"),
-                "ndvi": mock.get("ndvi"),
+                "ndvi": ndvi_latest if ndvi_latest is not None else mock.get("ndvi"),
                 "soil_moisture": mock.get("soil_moisture"),
                 "crop_stage": mock.get("crop_stage", "unknown"),
-                "price_change_percent": mock.get("price_change_percent", 0),
-                "market_price": mock.get("market_price"),
+                "price_change_percent": market.get("price_change_percent", 0),
+                "market_price": market.get("price") or mock.get("market_price"),
                 "days_since_sowing": mock.get("days_since_sowing"),
                 "previous_ndvi": mock.get("previous_ndvi") or mock.get("ndvi_previous"),
+                "ndvi_change": (
+                    ndvi_change
+                    if ndvi_change is not None
+                    else compute_ndvi_change(
+                        ndvi_latest,
+                        mock.get("previous_ndvi") or mock.get("ndvi_previous")
+                    )
+                ),
                 "user_district": mock.get("district") or geo_info.get("district"),
                 "district": mock.get("district") or geo_info.get("district"),
             }
@@ -462,9 +509,20 @@ async def get_advisory(
                 "alerts": fields["alerts"],
                 "metrics": fields["metrics"],
             }
+            if response.get("metrics") is not None and ndvi_history:
+                response["metrics"]["ndvi_history"] = ndvi_history
             return JSONResponse(response)
 
-        advisory = await generate_advisory(crop, weather, user_context)
+        advisory = await generate_advisory(
+            crop,
+            weather,
+            user_context,
+            ndvi_latest=ndvi_latest,
+            ndvi_change=ndvi_change,
+            ndvi_history=ndvi_history,
+        )
+        if ndvi_history and isinstance(advisory.get("metrics"), dict):
+            advisory["metrics"]["ndvi_history"] = ndvi_history
         return JSONResponse(advisory)
 
     except HTTPException:
@@ -485,14 +543,21 @@ async def enhance_advisory_with_rules(advisory: Dict[str, Any], crop_name: str) 
             district=advisory.get("district"),
             village=advisory.get("village"),
         )
+        ndvi_latest, ndvi_change, ndvi_history = await fetch_ndvi_context(lat, lon, crop)
         crop_health_data = load_json_file(os.path.join(DATA_PATH, "crop_health.json"))
-        market_data = load_json_file(os.path.join(DATA_PATH, "market_prices.json"))
+        
+        # Fetch real market price with fallback
+        market = await fetch_market_price(crop, geo_info.get("district"))
 
         crop_health = crop_health_data.get(crop, {})
-        market = market_data.get(crop, {})
 
         features = combine_features(weather, crop_health, market)
+        if ndvi_latest is not None:
+            features["ndvi"] = ndvi_latest
+        if ndvi_change is not None:
+            features["ndvi_change"] = ndvi_change
         features["market_price"] = market.get("price")
+        features["price_change_percent"] = market.get("price_change_percent", 0.0)
         features["days_since_sowing"] = crop_health.get("days_since_sowing")
         features["previous_ndvi"] = (
             crop_health.get("previous_ndvi")
@@ -515,6 +580,8 @@ async def enhance_advisory_with_rules(advisory: Dict[str, Any], crop_name: str) 
         advisory.setdefault("summary", fields["summary"])
         advisory["alerts"] = fields["alerts"]
         advisory.setdefault("metrics", {}).update({k: v for k, v in fields["metrics"].items() if v is not None})
+        if ndvi_history:
+            advisory["metrics"]["ndvi_history"] = ndvi_history
         advisory.setdefault("data_sources", {}).update({"weather": "Open-Meteo"})
         advisory["last_updated"] = weather.get("timestamp", advisory.get("last_updated"))
         return advisory
@@ -522,18 +589,32 @@ async def enhance_advisory_with_rules(advisory: Dict[str, Any], crop_name: str) 
         return advisory
 
 
-async def generate_advisory(crop_name: str, weather: Dict[str, Any], user_context: Dict[str, Any]) -> Dict[str, Any]:
+async def generate_advisory(
+    crop_name: str,
+    weather: Dict[str, Any],
+    user_context: Dict[str, Any],
+    ndvi_latest: Optional[float] = None,
+    ndvi_change: Optional[float] = None,
+    ndvi_history: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
     """Generate advisory dynamically for crops without pre-generated files."""
     try:
         crop = crop_name.lower()
         crop_health_data = load_json_file(os.path.join(DATA_PATH, "crop_health.json"))
-        market_data = load_json_file(os.path.join(DATA_PATH, "market_prices.json"))
+        
+        # Fetch real market price with fallback
+        district = user_context.get("district") or user_context.get("user_district")
+        market = await fetch_market_price(crop_name, district)
 
         crop_health = crop_health_data.get(crop, {})
-        market = market_data.get(crop, {})
 
         features = combine_features(weather, crop_health, market)
+        if ndvi_latest is not None:
+            features["ndvi"] = ndvi_latest
+        if ndvi_change is not None:
+            features["ndvi_change"] = ndvi_change
         features["market_price"] = market.get("price")
+        features["price_change_percent"] = market.get("price_change_percent", 0.0)
         features["days_since_sowing"] = crop_health.get("days_since_sowing")
         features["previous_ndvi"] = (
             crop_health.get("previous_ndvi")
@@ -541,7 +622,15 @@ async def generate_advisory(crop_name: str, weather: Dict[str, Any], user_contex
             or crop_health.get("ndvi_prior")
         )
 
+        if ndvi_latest is not None:
+            user_context.setdefault("ndvi", ndvi_latest)
+        if ndvi_change is not None:
+            user_context.setdefault("ndvi_change", ndvi_change)
+
         advisory_fields, max_score, fired_rules, breakdown = build_advisory_from_features(crop, features, user_context)
+
+        if ndvi_history:
+            advisory_fields.setdefault("metrics", {}).setdefault("ndvi_history", ndvi_history)
 
         if max_score >= 0.8:
             priority = "High"

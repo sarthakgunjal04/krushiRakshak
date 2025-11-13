@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CloudRain, TrendingUp, Satellite, AlertTriangle, RefreshCw, Sprout, Thermometer, Droplets, Bug } from "lucide-react";
+import { CloudRain, TrendingUp, Satellite, AlertTriangle, RefreshCw, Sprout, Thermometer, Droplets, Bug, ArrowUpRight, ArrowDownRight, ArrowRight } from "lucide-react";
 import { getDashboardData, getCurrentUser } from "@/services/api";
 import type { DashboardResponse, Alert } from "@/types/fusion";
 import { useNavigate } from "react-router-dom";
@@ -101,6 +101,78 @@ const Dashboard = () => {
     }
   };
 
+  const getNdviStatus = (value: number | null) => {
+    if (value == null) {
+      return { label: "Unknown", badgeClass: "bg-muted text-muted-foreground" };
+    }
+    if (value > 0.6) {
+      return { label: "Good", badgeClass: "bg-success/15 text-success" };
+    }
+    if (value >= 0.4) {
+      return { label: "Moderate", badgeClass: "bg-warning/15 text-warning" };
+    }
+    return { label: "Poor", badgeClass: "bg-destructive/15 text-destructive" };
+  };
+
+  const getTrendInfo = (change: number | null) => {
+    if (change == null) {
+      return { icon: ArrowRight, color: "text-muted-foreground", label: "No trend data" };
+    }
+    if (change > 0.02) {
+      return { icon: ArrowUpRight, color: "text-success", label: "NDVI rising" };
+    }
+    if (change < -0.02) {
+      return { icon: ArrowDownRight, color: "text-destructive", label: "NDVI dropping" };
+    }
+    return { icon: ArrowRight, color: "text-warning", label: "NDVI steady" };
+  };
+
+  const formatTimestamp = (iso?: string) => {
+    if (!iso) return "—";
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return iso;
+    return date.toLocaleString();
+  };
+
+  const ndviData = dashboardData?.ndvi;
+  const ndviLatest = typeof ndviData?.latest === "number" ? ndviData.latest : null;
+  const ndviChange = typeof ndviData?.change === "number" ? ndviData.change : null;
+  const ndviHistoryRaw = Array.isArray(ndviData?.history) ? ndviData.history : [];
+  const ndviHistory = useMemo(
+    () =>
+      ndviHistoryRaw
+        .filter((entry: any) => entry && typeof entry.ndvi === "number")
+        .slice(-7),
+    [ndviHistoryRaw]
+  );
+
+  const sparklinePoints = useMemo(() => {
+    const values = ndviHistory.map((entry: any) => entry.ndvi as number);
+    if (!values.length) {
+      if (ndviLatest != null) {
+        values.push(ndviLatest, ndviLatest);
+      } else {
+        return null;
+      }
+    } else if (values.length === 1) {
+      values.push(values[0]);
+    }
+
+    const max = Math.max(...values);
+    const min = Math.min(...values);
+    const height = 40;
+    const width = 100;
+    const range = max - min || 0.0001;
+
+    return values
+      .map((value, index) => {
+        const x = (index / (values.length - 1)) * width;
+        const y = height - ((value - min) / range) * height;
+        return `${x},${y}`;
+      })
+      .join(" ");
+  }, [ndviHistory, ndviLatest]);
+
   const LoadingSkeleton = () => (
     <div className="min-h-screen py-8 px-4">
       <div className="max-w-7xl mx-auto">
@@ -151,10 +223,12 @@ const Dashboard = () => {
   const alerts = dashboardData?.alerts || [];
   const cropHealth = dashboardData?.crop_health || {};
 
-  const healthScores = Object.values(cropHealth).map((crop: any) => crop.health_score || 0);
-  const avgHealthScore = healthScores.length > 0 ? Math.round(healthScores.reduce((a, b) => a + b, 0) / healthScores.length) : 78;
-
-  const getHealthStatus = (score: number) => (score >= 80 ? "Excellent" : score >= 60 ? "Good" : score >= 40 ? "Fair" : "Poor");
+  const ndviStatus = getNdviStatus(ndviLatest);
+  const ndviTrend = getTrendInfo(ndviChange);
+  const TrendIcon = ndviTrend.icon;
+  const formattedNdviChange = ndviChange != null ? `${ndviChange > 0 ? "+" : ""}${ndviChange.toFixed(3)}` : null;
+  const lastUpdated = formatTimestamp(dashboardData?.weather?.timestamp);
+  const sparklineColor = ndviStatus.label === "Good" ? "text-success" : ndviStatus.label === "Moderate" ? "text-warning" : ndviStatus.label === "Poor" ? "text-destructive" : "text-muted-foreground";
 
   const marketPrices = Object.values(market);
   const avgMarketPrice = marketPrices.length > 0 ? Math.round(marketPrices.reduce((sum: number, crop: any) => sum + (crop.price || 0), 0) / marketPrices.length) : 2450;
@@ -214,23 +288,65 @@ const Dashboard = () => {
             </div>
           </Card>
 
-          {/* NDVI Health Card */}
+          {/* NDVI Insight Card */}
           <Card className="p-6 hover:shadow-hover transition-all bg-gradient-card">
             <div className="flex items-start justify-between mb-4">
               <div>
-                <p className="text-sm text-muted-foreground mb-1">Crop Health (NDVI)</p>
-                <h3 className="text-2xl font-bold">{getHealthStatus(avgHealthScore)}</h3>
+                <p className="text-sm text-muted-foreground mb-1">Satellite NDVI</p>
+                {ndviLatest != null ? (
+                  <div className="flex items-baseline gap-3">
+                    <h3 className="text-3xl font-bold">{ndviLatest.toFixed(2)}</h3>
+                    <span className={`text-xs font-medium px-2 py-1 rounded-full tracking-wide ${ndviStatus.badgeClass}`}>
+                      {ndviStatus.label}
+                    </span>
+                  </div>
+                ) : (
+                  <h3 className="text-2xl font-bold text-muted-foreground">NDVI unavailable</h3>
+                )}
               </div>
-              <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center">
+              <div className="w-12 h-12 rounded-full bg-primary/15 flex items-center justify-center">
                 <Satellite className="h-6 w-6 text-primary" />
               </div>
             </div>
-            <div className="relative pt-1">
-              <div className="overflow-hidden h-3 text-xs flex rounded-full bg-muted">
-                <div style={{ width: `${avgHealthScore}%` }} className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-success"></div>
+
+            {ndviLatest != null ? (
+              <>
+                <div className="flex items-center gap-2 text-sm mb-4">
+                  <TrendIcon className={`h-4 w-4 ${ndviTrend.color}`} />
+                  <span className="font-medium">{ndviTrend.label}</span>
+                  {formattedNdviChange && <span className="text-muted-foreground">({formattedNdviChange})</span>}
+                </div>
+                <div className="h-16 mb-4">
+                  {sparklinePoints ? (
+                    <svg viewBox="0 0 100 40" className="w-full h-full">
+                      <polyline
+                        fill="none"
+                        vectorEffect="non-scaling-stroke"
+                        strokeWidth={2.5}
+                        className={sparklineColor}
+                        stroke="currentColor"
+                        points={sparklinePoints}
+                      />
+                      <line x1="0" y1="36" x2="100" y2="36" stroke="currentColor" strokeWidth={0.75} strokeOpacity={0.2} className="text-muted-foreground" />
+                    </svg>
+                  ) : (
+                    <div className="w-full h-full rounded-md bg-muted flex items-center justify-center text-xs text-muted-foreground">
+                      No history data
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>Last updated {lastUpdated}</span>
+                  <span>7-day trend</span>
+                </div>
+              </>
+            ) : (
+              <div className="space-y-3">
+                <div className="w-full h-16 rounded-md bg-muted" />
+                <p className="text-sm text-muted-foreground">NDVI unavailable</p>
+                <p className="text-xs text-muted-foreground">Last updated {lastUpdated}</p>
               </div>
-              <p className="text-sm text-muted-foreground mt-2">Health Score: {avgHealthScore}%</p>
-            </div>
+            )}
           </Card>
         </div>
 
