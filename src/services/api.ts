@@ -16,6 +16,8 @@ export interface Post {
   };
   author_name?: string | null;
   region?: string | null;
+  crop?: string | null;
+  category?: string | null;
   likes_count: number;
   comments_count: number;
   image_url?: string | null;
@@ -26,6 +28,8 @@ export interface Post {
 export interface CreatePostData {
   content: string;
   region?: string;
+  crop?: string;
+  category?: string;
   image_url?: string;
 }
 
@@ -40,6 +44,16 @@ export interface Comment {
 
 export interface CreateCommentData {
   content: string;
+}
+
+export interface TopContributor {
+  user_id: number;
+  name: string;
+  posts_count: number;
+}
+
+export interface UploadImageResponse {
+  url: string;
 }
 
 // Backend API base URL - adjust this if your backend runs on a different port
@@ -391,9 +405,18 @@ export const getAdvisory = async (cropName: string): Promise<AdvisoryResponse> =
 /**
  * Fetch all community posts
  */
-export const getCommunityPosts = async (): Promise<Post[]> => {
+export const getCommunityPosts = async (filters?: { crop?: string; category?: string }): Promise<Post[]> => {
   try {
-    const response = await api.get<Post[]>("/community/posts");
+    const params = new URLSearchParams();
+    if (filters?.crop) {
+      params.append("crop", filters.crop);
+    }
+    if (filters?.category) {
+      params.append("category", filters.category);
+    }
+    const queryString = params.toString();
+    const url = `/community/posts${queryString ? `?${queryString}` : ""}`;
+    const response = await api.get<Post[]>(url);
     return response.data;
   } catch (error: any) {
     if (error.response) {
@@ -411,6 +434,36 @@ export const getCommunityPosts = async (): Promise<Post[]> => {
       throw new Error("Unable to reach server. Please check your internet connection and try again.");
     } else {
       throw new Error(error.message || "An unexpected error occurred while loading posts.");
+    }
+  }
+};
+
+/**
+ * Search posts by keyword
+ */
+export const searchPosts = async (query: string): Promise<Post[]> => {
+  try {
+    if (!query || !query.trim()) {
+      return getCommunityPosts();
+    }
+    const response = await api.get<Post[]>(`/community/posts/search?q=${encodeURIComponent(query.trim())}`);
+    return response.data;
+  } catch (error: any) {
+    if (error.response) {
+      const status = error.response.status;
+      const detail = error.response.data?.detail || error.response.data?.message;
+      
+      if (status === 401) {
+        throw new Error("Please login to search posts.");
+      } else if (status === 500) {
+        throw new Error("Server error while searching posts. Please try again later.");
+      } else {
+        throw new Error(detail || "Failed to search posts. Please try again.");
+      }
+    } else if (error.request) {
+      throw new Error("Unable to reach server. Please check your internet connection and try again.");
+    } else {
+      throw new Error(error.message || "An unexpected error occurred while searching posts.");
     }
   }
 };
@@ -530,6 +583,79 @@ export const createComment = async (postId: number, commentData: CreateCommentDa
     } else {
       throw new Error(error.message || "An unexpected error occurred while creating comment.");
     }
+  }
+};
+
+/**
+ * Get top contributors
+ */
+export const getTopContributors = async (limit: number = 10): Promise<TopContributor[]> => {
+  try {
+    const response = await api.get<TopContributor[]>(`/community/top-contributors?limit=${limit}`);
+    return response.data;
+  } catch (error: any) {
+    if (error.response) {
+      const status = error.response.status;
+      const detail = error.response.data?.detail || error.response.data?.message;
+      
+      if (status === 401) {
+        throw new Error("Please login to view top contributors.");
+      } else if (status === 500) {
+        throw new Error("Server error while loading top contributors. Please try again later.");
+      } else {
+        throw new Error(detail || "Failed to load top contributors. Please try again.");
+      }
+    } else if (error.request) {
+      throw new Error("Unable to reach server. Please check your internet connection and try again.");
+    } else {
+      throw new Error(error.message || "An unexpected error occurred while loading top contributors.");
+    }
+  }
+};
+
+/**
+ * Upload an image file
+ */
+export const uploadImage = async (file: File): Promise<string> => {
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+    
+    const token = localStorage.getItem("access_token");
+    const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+    
+    const response = await fetch(`${API_BASE_URL}/community/upload-image`, {
+      method: "POST",
+      headers: {
+        "Authorization": token ? `Bearer ${token}` : "",
+      },
+      body: formData,
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const detail = errorData.detail || errorData.message;
+      
+      if (response.status === 401) {
+        throw new Error("Please login to upload images.");
+      } else if (response.status === 400) {
+        throw new Error(detail || "Invalid file. Please check file type and size.");
+      } else if (response.status === 500) {
+        throw new Error(detail || "Server error while uploading image. Please try again later.");
+      } else {
+        throw new Error(detail || "Failed to upload image. Please try again.");
+      }
+    }
+    
+    const data: UploadImageResponse = await response.json();
+    // Convert relative URL to absolute
+    const baseUrl = API_BASE_URL.replace(/\/$/, "");
+    return data.url.startsWith("http") ? data.url : `${baseUrl}${data.url}`;
+  } catch (error: any) {
+    if (error.message) {
+      throw error;
+    }
+    throw new Error("An unexpected error occurred while uploading image.");
   }
 };
 

@@ -13,10 +13,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Heart, MessageCircle, Share2, Plus, TrendingUp, Loader2 } from "lucide-react";
+import { Heart, MessageCircle, Share2, Plus, TrendingUp, Loader2, Send, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { getCommunityPosts, togglePostLike, createPost, type Post, type CreatePostData } from "@/services/api";
+import { getCommunityPosts, togglePostLike, createPost, getPostComments, createComment, getTopContributors, uploadImage, searchPosts, type Post, type CreatePostData, type Comment, type TopContributor } from "@/services/api";
 import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const Community = () => {
   const { t } = useTranslation();
@@ -26,25 +28,105 @@ const Community = () => {
   const [likingPostId, setLikingPostId] = useState<number | null>(null);
   const [isPostModalOpen, setIsPostModalOpen] = useState(false);
   const [postContent, setPostContent] = useState("");
+  const [postImageFile, setPostImageFile] = useState<File | null>(null);
+  const [postCrop, setPostCrop] = useState<string>("none");
+  const [postCategory, setPostCategory] = useState<string>("none");
   const [isCreatingPost, setIsCreatingPost] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCrop, setSelectedCrop] = useState<string>("all");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [openCommentsPostId, setOpenCommentsPostId] = useState<number | null>(null);
+  const [comments, setComments] = useState<Record<number, Comment[]>>({});
+  const [loadingComments, setLoadingComments] = useState<Record<number, boolean>>({});
+  const [newComment, setNewComment] = useState<Record<number, string>>({});
+  const [postingComment, setPostingComment] = useState<number | null>(null);
+  const [topContributors, setTopContributors] = useState<TopContributor[]>([]);
+  const [loadingContributors, setLoadingContributors] = useState(true);
 
-  // Fetch posts on component mount
+  // Fetch posts and top contributors on component mount and when filters change
   useEffect(() => {
-    const fetchPosts = async () => {
+    if (searchQuery.trim()) return; // Don't fetch if searching
+    
+    const fetchData = async () => {
       setIsLoading(true);
       setError(null);
       try {
-        const data = await getCommunityPosts();
-        setPosts(data);
+        const filters: { crop?: string; category?: string } = {};
+        if (selectedCrop && selectedCrop !== "all") filters.crop = selectedCrop;
+        if (selectedCategory && selectedCategory !== "all") filters.category = selectedCategory;
+        
+        const [postsData, contributorsData] = await Promise.all([
+          getCommunityPosts(Object.keys(filters).length > 0 ? filters : undefined),
+          getTopContributors(10)
+        ]);
+        setPosts(postsData);
+        setTopContributors(contributorsData);
       } catch (err: any) {
         setError(err.message || "Failed to load posts");
         toast.error(err.message || "Failed to load community posts");
       } finally {
         setIsLoading(false);
+        setLoadingContributors(false);
       }
     };
-    fetchPosts();
-  }, []);
+    fetchData();
+  }, [selectedCrop, selectedCategory]);
+
+  // Debounced search
+  useEffect(() => {
+    const timeoutId = setTimeout(async () => {
+      if (searchQuery.trim()) {
+        setIsLoading(true);
+        setError(null);
+        try {
+          const postsData = await searchPosts(searchQuery);
+          setPosts(postsData);
+        } catch (err: any) {
+          setError(err.message || "Failed to search posts");
+          toast.error(err.message || "Failed to search posts");
+        } finally {
+          setIsLoading(false);
+        }
+      } else if (selectedCrop === "all" && selectedCategory === "all") {
+        // Only reload if no filters are active
+        const fetchData = async () => {
+          setIsLoading(true);
+          setError(null);
+          try {
+            const postsData = await getCommunityPosts();
+            setPosts(postsData);
+          } catch (err: any) {
+            setError(err.message || "Failed to load posts");
+            toast.error(err.message || "Failed to load community posts");
+          } finally {
+            setIsLoading(false);
+          }
+        };
+        fetchData();
+      }
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery]);
+
+  // Handle image file selection
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("Invalid file type. Please select an image file.");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image is too large. Maximum size is 5MB.");
+      return;
+    }
+
+    setPostImageFile(file);
+  };
 
   // Handle post creation
   const handleCreatePost = async () => {
@@ -54,23 +136,107 @@ const Community = () => {
     }
 
     setIsCreatingPost(true);
+    let imageUrl: string | undefined = undefined;
+
+    // Upload image if selected
+    if (postImageFile) {
+      setIsUploadingImage(true);
+      try {
+        imageUrl = await uploadImage(postImageFile);
+      } catch (err: any) {
+        setIsUploadingImage(false);
+        setIsCreatingPost(false);
+        toast.error(err.message || "Failed to upload image");
+        return;
+      }
+      setIsUploadingImage(false);
+    }
+
     try {
       const postData: CreatePostData = {
         content: postContent.trim(),
+        crop: postCrop && postCrop !== "none" ? postCrop : undefined,
+        category: postCategory && postCategory !== "none" ? postCategory : undefined,
+        image_url: imageUrl,
       };
       const newPost = await createPost(postData);
       
-      // Add the new post to the beginning of the list
-      setPosts([newPost, ...posts]);
+      // Refresh posts and contributors
+      const filters: { crop?: string; category?: string } = {};
+      if (selectedCrop && selectedCrop !== "all") filters.crop = selectedCrop;
+      if (selectedCategory && selectedCategory !== "all") filters.category = selectedCategory;
+      
+      const [postsData, contributorsData] = await Promise.all([
+        getCommunityPosts(Object.keys(filters).length > 0 ? filters : undefined),
+        getTopContributors(10)
+      ]);
+      setPosts(postsData);
+      setTopContributors(contributorsData);
       
       // Reset form and close modal
       setPostContent("");
+      setPostImageFile(null);
+      setPostCrop("none");
+      setPostCategory("none");
       setIsPostModalOpen(false);
       toast.success(t("community.post_created_success"));
     } catch (err: any) {
       toast.error(err.message || t("community.post_create_error"));
     } finally {
       setIsCreatingPost(false);
+    }
+  };
+
+  // Handle comment button click
+  const handleCommentClick = async (postId: number) => {
+    if (openCommentsPostId === postId) {
+      setOpenCommentsPostId(null);
+      return;
+    }
+
+    setOpenCommentsPostId(postId);
+    setLoadingComments(prev => ({ ...prev, [postId]: true }));
+    
+    try {
+      const commentsData = await getPostComments(postId);
+      setComments(prev => ({ ...prev, [postId]: commentsData }));
+    } catch (err: any) {
+      toast.error(err.message || "Failed to load comments");
+      setOpenCommentsPostId(null);
+    } finally {
+      setLoadingComments(prev => ({ ...prev, [postId]: false }));
+    }
+  };
+
+  // Handle comment submission
+  const handleSubmitComment = async (postId: number) => {
+    const commentText = newComment[postId]?.trim();
+    if (!commentText) {
+      toast.error(t("community.comment_required"));
+      return;
+    }
+
+    setPostingComment(postId);
+    try {
+      const newCommentData = await createComment(postId, { content: commentText });
+      
+      setComments(prev => ({
+        ...prev,
+        [postId]: [...(prev[postId] || []), newCommentData]
+      }));
+      
+      setPosts(prev => prev.map(post => 
+        post.id === postId 
+          ? { ...post, comments_count: post.comments_count + 1 }
+          : post
+      ));
+      
+      setNewComment(prev => ({ ...prev, [postId]: "" }));
+      toast.success(t("community.comment_posted"));
+    } catch (err: any) {
+      toast.error(err.message || "Failed to post comment");
+    } finally {
+      setPostingComment(null);
     }
   };
 
@@ -115,11 +281,6 @@ const Community = () => {
     });
   };
 
-  const topContributors = [
-    { name: "Rajesh K.", posts: 24 },
-    { name: "Priya S.", posts: 18 },
-    { name: "Anil P.", posts: 15 },
-  ];
 
   // Loading skeleton
   const LoadingSkeleton = () => (
@@ -160,6 +321,19 @@ const Community = () => {
               </Button>
             </div>
 
+            {/* Search Input */}
+            <div className="mb-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder={t("community.search_placeholder")}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+            </div>
+
             {isLoading ? (
               <LoadingSkeleton />
             ) : error ? (
@@ -184,12 +358,36 @@ const Community = () => {
                         </AvatarFallback>
                       </Avatar>
                       <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
                           <h3 className="font-semibold">{post.author_name || post.author?.name || "Unknown"}</h3>
                           <span className="text-sm text-muted-foreground">• {post.region || "Unknown"}</span>
+                          {post.crop && (
+                            <Badge variant="outline" className="text-xs">
+                              {post.crop}
+                            </Badge>
+                          )}
+                          {post.category && (
+                            <Badge variant="secondary" className="text-xs">
+                              {t(`community.category.${post.category}`) || post.category}
+                            </Badge>
+                          )}
                           <span className="text-xs text-muted-foreground">• {formatTimestamp(post.created_at)}</span>
                         </div>
                         <p className="text-foreground mb-4 whitespace-pre-wrap">{post.content}</p>
+
+                        {/* Post Image */}
+                        {post.image_url && (
+                          <div className="mb-4 rounded-lg overflow-hidden border">
+                            <img 
+                              src={post.image_url} 
+                              alt="Post image" 
+                              className="w-full h-auto max-h-96 object-cover"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                              }}
+                            />
+                          </div>
+                        )}
 
                         {/* Actions */}
                         <div className="flex items-center gap-6 text-sm text-muted-foreground">
@@ -209,7 +407,14 @@ const Community = () => {
                             )}
                             <span>{post.likes_count}</span>
                           </button>
-                          <button className="flex items-center gap-2 hover:text-primary transition-colors">
+                          <button 
+                            onClick={() => handleCommentClick(post.id)}
+                            className={`flex items-center gap-2 transition-colors ${
+                              openCommentsPostId === post.id 
+                                ? "text-primary" 
+                                : "hover:text-primary"
+                            }`}
+                          >
                             <MessageCircle className="h-4 w-4" />
                             <span>{post.comments_count}</span>
                           </button>
@@ -218,6 +423,76 @@ const Community = () => {
                             <span>{t("community.share")}</span>
                           </button>
                         </div>
+
+                        {/* Comments Section */}
+                        {openCommentsPostId === post.id && (
+                          <div className="mt-4 pt-4 border-t">
+                            <div className="space-y-3">
+                              {loadingComments[post.id] ? (
+                                <div className="space-y-2">
+                                  <Skeleton className="h-16 w-full" />
+                                  <Skeleton className="h-16 w-full" />
+                                </div>
+                              ) : (
+                                <>
+                                  {comments[post.id] && comments[post.id].length > 0 ? (
+                                    <div className="space-y-3 max-h-64 overflow-y-auto">
+                                      {comments[post.id].map((comment) => (
+                                        <div key={comment.id} className="flex gap-3">
+                                          <Avatar className="w-8 h-8">
+                                            <AvatarFallback className="bg-muted text-foreground text-xs">
+                                              {(comment.author_name || "U").charAt(0).toUpperCase()}
+                                            </AvatarFallback>
+                                          </Avatar>
+                                          <div className="flex-1">
+                                            <div className="flex items-center gap-2 mb-1">
+                                              <span className="font-medium text-sm">{comment.author_name || "Unknown"}</span>
+                                              <span className="text-xs text-muted-foreground">
+                                                {formatTimestamp(comment.created_at)}
+                                              </span>
+                                            </div>
+                                            <p className="text-sm text-foreground whitespace-pre-wrap">{comment.content}</p>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <p className="text-sm text-muted-foreground text-center py-2">
+                                      {t("community.no_comments")}
+                                    </p>
+                                  )}
+
+                                  <div className="flex gap-2 pt-2">
+                                    <Input
+                                      placeholder={t("community.write_comment")}
+                                      value={newComment[post.id] || ""}
+                                      onChange={(e) => setNewComment(prev => ({ ...prev, [post.id]: e.target.value }))}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter" && !e.shiftKey) {
+                                          e.preventDefault();
+                                          handleSubmitComment(post.id);
+                                        }
+                                      }}
+                                      disabled={postingComment === post.id}
+                                      className="flex-1"
+                                    />
+                                    <Button
+                                      size="sm"
+                                      onClick={() => handleSubmitComment(post.id)}
+                                      disabled={postingComment === post.id || !newComment[post.id]?.trim()}
+                                    >
+                                      {postingComment === post.id ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                      ) : (
+                                        <Send className="h-4 w-4" />
+                                      )}
+                                    </Button>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </Card>
@@ -234,22 +509,73 @@ const Community = () => {
                 <TrendingUp className="h-5 w-5 text-primary" />
                 <h3 className="font-heading font-bold">{t("community.top_contributors")}</h3>
               </div>
-              <div className="space-y-3">
-                {topContributors.map((contributor, idx) => (
-                  <div key={idx} className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <span className="font-bold text-lg text-muted-foreground">#{idx + 1}</span>
-                      <Avatar className="w-8 h-8">
-                        <AvatarFallback className="bg-muted text-foreground">
-                          {contributor.name.charAt(0)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span className="font-medium">{contributor.name}</span>
+              {loadingContributors ? (
+                <div className="space-y-3">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Skeleton className="w-6 h-6" />
+                        <Skeleton className="w-8 h-8 rounded-full" />
+                        <Skeleton className="h-4 w-24" />
+                      </div>
+                      <Skeleton className="h-5 w-16" />
                     </div>
-                    <Badge variant="secondary">{t("community.posts_count", { count: contributor.posts })}</Badge>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : topContributors.length > 0 ? (
+                <div className="space-y-3">
+                  {topContributors.map((contributor, idx) => (
+                    <div key={contributor.user_id} className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="font-bold text-lg text-muted-foreground">#{idx + 1}</span>
+                        <Avatar className="w-8 h-8">
+                          <AvatarFallback className="bg-muted text-foreground">
+                            {contributor.name.charAt(0)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="font-medium">{contributor.name}</span>
+                      </div>
+                      <Badge variant="secondary">{t("community.posts_count", { count: contributor.posts_count })}</Badge>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  {t("community.no_contributors")}
+                </p>
+              )}
+            </Card>
+
+            {/* Filters */}
+            <Card className="p-6 bg-gradient-card">
+              <h3 className="font-heading font-bold mb-4">{t("community.filter_by_crop")}</h3>
+              <Select value={selectedCrop} onValueChange={setSelectedCrop}>
+                <SelectTrigger>
+                  <SelectValue placeholder={t("community.select_crop")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t("community.all_crops")}</SelectItem>
+                  <SelectItem value="rice">Rice</SelectItem>
+                  <SelectItem value="wheat">Wheat</SelectItem>
+                  <SelectItem value="cotton">Cotton</SelectItem>
+                  <SelectItem value="sugarcane">Sugarcane</SelectItem>
+                  <SelectItem value="soybean">Soybean</SelectItem>
+                  <SelectItem value="onion">Onion</SelectItem>
+                </SelectContent>
+              </Select>
+              <h3 className="font-heading font-bold mb-4 mt-4">{t("community.filter_by_category")}</h3>
+              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                <SelectTrigger>
+                  <SelectValue placeholder={t("community.select_category")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t("community.all_categories")}</SelectItem>
+                  <SelectItem value="tip">{t("community.tip")}</SelectItem>
+                  <SelectItem value="question">{t("community.question")}</SelectItem>
+                  <SelectItem value="issue">{t("community.issue")}</SelectItem>
+                  <SelectItem value="success">{t("community.success")}</SelectItem>
+                </SelectContent>
+              </Select>
             </Card>
 
             {/* Trending Topics */}
@@ -287,6 +613,39 @@ const Community = () => {
               className="min-h-[150px] resize-none"
               disabled={isCreatingPost}
             />
+            <Input
+              type="file"
+              accept="image/*"
+              onChange={handleImageSelect}
+              disabled={isCreatingPost || isUploadingImage}
+              className="cursor-pointer"
+            />
+            <Select value={postCrop} onValueChange={setPostCrop}>
+              <SelectTrigger>
+                <SelectValue placeholder={t("community.select_crop")} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">{t("community.select_crop")}</SelectItem>
+                <SelectItem value="rice">Rice</SelectItem>
+                <SelectItem value="wheat">Wheat</SelectItem>
+                <SelectItem value="cotton">Cotton</SelectItem>
+                <SelectItem value="sugarcane">Sugarcane</SelectItem>
+                <SelectItem value="soybean">Soybean</SelectItem>
+                <SelectItem value="onion">Onion</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={postCategory} onValueChange={setPostCategory}>
+              <SelectTrigger>
+                <SelectValue placeholder={t("community.select_category")} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">{t("community.select_category")}</SelectItem>
+                <SelectItem value="tip">{t("community.tip")}</SelectItem>
+                <SelectItem value="question">{t("community.question")}</SelectItem>
+                <SelectItem value="issue">{t("community.issue")}</SelectItem>
+                <SelectItem value="success">{t("community.success")}</SelectItem>
+              </SelectContent>
+            </Select>
             <p className="text-xs text-muted-foreground">
               {t("community.post_hint")}
             </p>
@@ -297,6 +656,9 @@ const Community = () => {
               onClick={() => {
                 setIsPostModalOpen(false);
                 setPostContent("");
+                setPostImageFile(null);
+                setPostCrop("none");
+                setPostCategory("none");
               }}
               disabled={isCreatingPost}
             >
@@ -304,13 +666,13 @@ const Community = () => {
             </Button>
             <Button
               onClick={handleCreatePost}
-              disabled={isCreatingPost || !postContent.trim()}
+              disabled={isCreatingPost || isUploadingImage || !postContent.trim()}
               className="bg-primary hover:bg-primary/90"
             >
-              {isCreatingPost ? (
+              {isCreatingPost || isUploadingImage ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {t("community.posting")}
+                  {isUploadingImage ? t("community.uploading_image") : t("community.posting")}
                 </>
               ) : (
                 t("community.post")

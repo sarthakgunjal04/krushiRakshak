@@ -70,6 +70,8 @@ class UserOut(UserBase):
 class PostBase(BaseModel):
     content: str
     region: Optional[str] = None
+    crop: Optional[str] = None
+    category: Optional[str] = None
     image_url: Optional[str] = None
 
 
@@ -92,6 +94,8 @@ class PostOut(PostBase):
     author: Optional[PostAuthor] = None
     author_name: Optional[str] = None  # For backward compatibility
     region: Optional[str] = None
+    crop: Optional[str] = None
+    category: Optional[str] = None
     likes_count: int
     comments_count: int
     created_at: datetime

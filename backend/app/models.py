@@ -36,6 +36,8 @@ class Post(Base):
     content = Column(Text, nullable=False)
     author_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     region = Column(String, nullable=True)  # State/region of the author
+    crop = Column(String, nullable=True)  # Crop type (rice, wheat, cotton, etc.)
+    category = Column(String, nullable=True)  # Post category (tip, question, issue, success)
     likes_count = Column(Integer, default=0)
     comments_count = Column(Integer, default=0)
     image_url = Column(String, nullable=True)  # URL to uploaded image
