@@ -25,6 +25,8 @@ from app.services.weather import get_realtime_weather
 from app.services.geocode import reverse_geocode
 from app.services.ndvi_synthetic import synthetic_ndvi, synthetic_ndvi_history
 from app.services.market_service import fetch_market_price
+from app.services.explainer import explain_advisory
+# Note: fetch_gov_alerts imported only for dashboard/recommend-crops, NOT for advisory endpoint
 from app.services.gov_alerts import fetch_gov_alerts
 
 router = APIRouter(prefix="/fusion", tags=["Fusion Engine"])
@@ -265,10 +267,93 @@ def run_rules(
     return fired, max_score
 
 
+def apply_gov_alert_boost(
+    gov_alerts: List[Dict[str, Any]],
+    crop_meta: Dict[str, Any],
+    current_score: float,
+    severity: str,
+) -> Tuple[float, str, List[str]]:
+    """
+    Boosts risk score based on government pest/weather alerts.
+    
+    Rules:
+      - If alert matches ANY crop pest → score * 1.25
+      - If alert contains words ['drought','heatwave'] → irrigation score boosted
+      - If alert contains words ['flood','heavy rain'] → disease score boosted
+      - If score becomes >0.8 → severity = 'high'
+    
+    Returns:
+        Tuple of (boosted_score, boosted_severity, matched_messages)
+    """
+    if not gov_alerts:
+        return current_score, severity, []
+    
+    matched_messages = []
+    boost_applied = False
+    
+    # Get crop pests from metadata
+    common_pests = [p.lower() for p in crop_meta.get("common_pests", [])]
+    common_diseases = [d.lower() for d in crop_meta.get("common_diseases", [])]
+    
+    # Keywords for weather-related risks
+    drought_keywords = ["drought", "heatwave", "heat wave", "scarcity", "water shortage"]
+    flood_keywords = ["flood", "heavy rain", "heavy rainfall", "waterlogging", "excess water"]
+    
+    new_score = current_score
+    new_severity = severity
+    
+    for alert in gov_alerts:
+        title = alert.get("title", "").lower()
+        description = alert.get("description", "").lower()
+        alert_text = f"{title} {description}"
+        
+        # Check for pest matches
+        pest_match = False
+        for pest in common_pests:
+            if pest in alert_text:
+                pest_match = True
+                matched_messages.append(f"Pest alert: {alert.get('title', 'Government advisory')}")
+                break
+        
+        # Check for disease matches
+        disease_match = False
+        for disease in common_diseases:
+            if disease in alert_text:
+                disease_match = True
+                matched_messages.append(f"Disease alert: {alert.get('title', 'Government advisory')}")
+                break
+        
+        # Check for drought/heatwave (irrigation risk)
+        drought_match = any(keyword in alert_text for keyword in drought_keywords)
+        if drought_match:
+            matched_messages.append(f"Weather alert: {alert.get('title', 'Drought/Heatwave advisory')}")
+        
+        # Check for flood/heavy rain (disease risk)
+        flood_match = any(keyword in alert_text for keyword in flood_keywords)
+        if flood_match:
+            matched_messages.append(f"Weather alert: {alert.get('title', 'Flood/Rain advisory')}")
+        
+        # Apply boost if any match found
+        if pest_match or disease_match or drought_match or flood_match:
+            boost_applied = True
+            new_score = min(new_score * 1.25, 1.0)
+    
+    # Update severity based on boosted score
+    if new_score >= 0.8:
+        new_severity = "high"
+    elif new_score >= 0.6:
+        new_severity = "medium"
+    else:
+        new_severity = "low"
+    
+    return new_score, new_severity, matched_messages
+
+
 def build_advisory_from_features(
     crop: str,
     raw_features: Dict[str, Any],
     user_context: Dict[str, Any] | None = None,
+    gov_alerts: List[Dict[str, Any]] | None = None,
 ) -> Tuple[Dict[str, Any], float, List[str], Dict[str, Any]]:
     """Evaluate rules and produce advisory fields for a crop."""
     crop = crop.lower()
@@ -323,8 +408,33 @@ def build_advisory_from_features(
     if context.get("region_priority_match") and max_score > 0:
         max_score = min(max_score * 1.1, 1.0)
 
-    fired_rules = pest_fired + irrigation_fired + market_fired
+    # Initial severity classification
+    if max_score >= 0.8:
+        severity = "high"
+    elif max_score >= 0.6:
+        severity = "medium"
+    else:
+        severity = "low"
 
+    # Apply government alert boost
+    if gov_alerts:
+        max_score, severity, gov_matches = apply_gov_alert_boost(
+            gov_alerts,
+            crop_meta,
+            max_score,
+            severity
+        )
+        
+        # Add government messages to fired rules (internal tracking)
+        if gov_matches:
+            fired_rules = pest_fired + irrigation_fired + market_fired
+            fired_rules.extend([f"GOV: {m}" for m in gov_matches])
+        else:
+            fired_rules = pest_fired + irrigation_fired + market_fired
+    else:
+        fired_rules = pest_fired + irrigation_fired + market_fired
+
+    # Final severity classification after gov boost
     if max_score >= 0.8:
         severity = "high"
         summary = "High risk detected"
@@ -359,6 +469,148 @@ def build_advisory_from_features(
     }
 
     return advisory_fields, max_score, fired_rules, rule_breakdown
+
+
+def score_crop(
+    crop_name: str,
+    weather: Dict[str, Any],
+    ndvi: Optional[float],
+    ndvi_change: Optional[float],
+    gov_alerts: List[Dict[str, Any]],
+    market_price: Optional[float],
+    crop_meta: Dict[str, Any],
+    district: Optional[str] = None,
+) -> Tuple[float, str]:
+    """
+    Score a crop based on multiple factors for recommendation.
+    
+    Returns:
+        Tuple of (score, reason_string)
+    """
+    score = 0.5  # Base score
+    reasons = []
+    
+    # Weather suitability
+    temp = weather.get("temperature")
+    rainfall = weather.get("rainfall")
+    humidity = weather.get("humidity")
+    
+    temp_min = crop_meta.get("optimal_temperature_min")
+    temp_max = crop_meta.get("optimal_temperature_max")
+    humidity_min = crop_meta.get("optimal_humidity_min")
+    humidity_max = crop_meta.get("optimal_humidity_max")
+    
+    # Temperature check
+    if temp is not None and temp_min is not None and temp_max is not None:
+        if temp_min <= temp <= temp_max:
+            score += 0.15
+            reasons.append("optimal temperature")
+        elif temp_min - 5 <= temp <= temp_max + 5:
+            score += 0.08
+            reasons.append("acceptable temperature")
+    
+    # Rainfall check (simplified - assume moderate rainfall is good for most crops)
+    if rainfall is not None:
+        # Most crops prefer 5-20mm rainfall range
+        if 5 <= rainfall <= 20:
+            score += 0.15
+            reasons.append("good rainfall")
+        elif 0 <= rainfall < 5:
+            score += 0.05
+            reasons.append("low rainfall")
+        elif rainfall > 20:
+            score += 0.08
+            reasons.append("high rainfall")
+    
+    # Humidity check
+    if humidity is not None and humidity_min is not None and humidity_max is not None:
+        if humidity_min <= humidity <= humidity_max:
+            score += 0.10
+            reasons.append("optimal humidity")
+        elif humidity_min - 10 <= humidity <= humidity_max + 10:
+            score += 0.05
+            reasons.append("acceptable humidity")
+    
+    # NDVI scoring
+    if ndvi is not None:
+        if ndvi > 0.4:
+            score += 0.10
+            reasons.append("good NDVI")
+        elif ndvi > 0.3:
+            score += 0.05
+            reasons.append("moderate NDVI")
+    
+    if ndvi_change is not None and ndvi_change > 0:
+        score += 0.05
+        reasons.append("positive NDVI trend")
+    
+    # Market price scoring (normalize to 0-0.2 range)
+    if market_price is not None:
+        # Assume prices range from 500 to 6000 per quintal
+        # Normalize: (price - 500) / (6000 - 500) * 0.2
+        normalized_price = min(max((market_price - 500) / 5500, 0), 1) * 0.2
+        score += normalized_price
+        if normalized_price > 0.15:
+            reasons.append("high market price")
+        elif normalized_price > 0.10:
+            reasons.append("good market price")
+    
+    # Gov alerts penalty (negative impact)
+    if gov_alerts:
+        common_pests = [p.lower() for p in crop_meta.get("common_pests", [])]
+        common_diseases = [d.lower() for d in crop_meta.get("common_diseases", [])]
+        crop_name_lower = crop_name.lower()
+        
+        alert_match = False
+        for alert in gov_alerts:
+            title = alert.get("title", "").lower()
+            description = alert.get("description", "").lower()
+            alert_text = f"{title} {description}"
+            
+            # Check if alert mentions crop name
+            if crop_name_lower in alert_text:
+                alert_match = True
+                break
+            
+            # Check if alert mentions crop pests
+            for pest in common_pests:
+                if pest in alert_text:
+                    alert_match = True
+                    break
+            if alert_match:
+                break
+            
+            # Check if alert mentions crop diseases
+            for disease in common_diseases:
+                if disease in alert_text:
+                    alert_match = True
+                    break
+            if alert_match:
+                break
+        
+        if alert_match:
+            score -= 0.25
+            reasons.append("pest/disease alerts present")
+    
+    # Region priority bonus
+    if district:
+        region_priority = crop_meta.get("region_priority", [])
+        if district in region_priority:
+            score += 0.10
+            reasons.append("region priority match")
+    
+    # Clamp score between 0.0 and 1.0
+    score = max(0.0, min(1.0, score))
+    
+    # Generate reason string
+    if reasons:
+        reason_str = ", ".join(reasons[:3])  # Limit to first 3 reasons
+        if len(reasons) > 3:
+            reason_str += " and more"
+    else:
+        reason_str = "Baseline suitability"
+    
+    return round(score, 2), reason_str
 
 
 @router.get("/dashboard")
@@ -471,9 +723,6 @@ async def get_advisory(
         # Fetch real market price
         market = await fetch_market_price(crop, geo_info.get("district"))
         
-        # Fetch government alerts using lat/lon (for internal use only, not returned)
-        gov_alerts = await fetch_gov_alerts(lat, lon)
-        
         mock = load_crop_mock(crop)
         if mock:
             features = {
@@ -500,31 +749,20 @@ async def get_advisory(
                 "district": mock.get("district") or geo_info.get("district"),
             }
 
-            fields, score, fired_rules, breakdown = build_advisory_from_features(crop, features, user_context)
+            fields, score, fired_rules, breakdown = build_advisory_from_features(
+                crop, features, user_context, gov_alerts=None
+            )
             
-            # Check for gov alerts matching crop pests and boost score
+            # Generate explanation
             crop_meta = crop_metadata.get(crop, {})
-            common_pests = [p.lower() for p in crop_meta.get("common_pests", [])]
-            
-            # Check if any gov alert mentions pests from crop metadata
-            pest_match_found = False
-            for gov_alert in gov_alerts:
-                alert_text = (gov_alert.get("title", "") + " " + gov_alert.get("description", "")).lower()
-                for pest in common_pests:
-                    if pest in alert_text:
-                        pest_match_found = True
-                        break
-                if pest_match_found:
-                    break
-            
-            if pest_match_found:
-                score = min(score * 1.2, 1.0)  # Boost score by 1.2x, cap at 1.0
-                # Escalate severity by 1 level
-                if fields["severity"] == "low":
-                    fields["severity"] = "medium"
-                elif fields["severity"] == "medium":
-                    fields["severity"] = "high"
-                # severity is already high, keep it
+            explanation = explain_advisory(
+                breakdown,
+                fired_rules,
+                fields["metrics"],
+                crop_meta,
+                score,
+                district=geo_info.get("district") or district,
+            )
             
             legacy_priority = "High" if score >= 0.8 else ("Medium" if score >= 0.6 else "Low")
             response = {
@@ -541,6 +779,7 @@ async def get_advisory(
                 "summary": fields["summary"],
                 "alerts": fields["alerts"],
                 "metrics": fields["metrics"],
+                "explanation": explanation,
             }
             if response.get("metrics") is not None and ndvi_history:
                 response["metrics"]["ndvi_history"] = ndvi_history
@@ -555,31 +794,6 @@ async def get_advisory(
             ndvi_history=ndvi_history,
         )
         
-        # Check for gov alerts matching crop pests and boost score
-        crop_meta = crop_metadata.get(crop, {})
-        common_pests = [p.lower() for p in crop_meta.get("common_pests", [])]
-        
-        # Check if any gov alert mentions pests from crop metadata
-        pest_match_found = False
-        for gov_alert in gov_alerts:
-            alert_text = (gov_alert.get("title", "") + " " + gov_alert.get("description", "")).lower()
-            for pest in common_pests:
-                if pest in alert_text:
-                    pest_match_found = True
-                    break
-            if pest_match_found:
-                break
-        
-        if pest_match_found:
-            advisory["rule_score"] = min(advisory.get("rule_score", 0) * 1.2, 1.0)
-            # Escalate severity by 1 level
-            current_severity = advisory.get("severity", "low").lower()
-            if current_severity == "low":
-                advisory["severity"] = "Medium"
-            elif current_severity == "medium":
-                advisory["severity"] = "High"
-            # severity is already high, keep it
-        
         if ndvi_history and isinstance(advisory.get("metrics"), dict):
             advisory["metrics"]["ndvi_history"] = ndvi_history
         return JSONResponse(advisory)
@@ -588,6 +802,144 @@ async def get_advisory(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating advisory: {str(e)}")
+
+
+@router.get("/recommend-crops")
+async def recommend_crops(
+    location: Optional[str] = None,
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
+    state: Optional[str] = None,
+    district: Optional[str] = None,
+    village: Optional[str] = None,
+):
+    """
+    Recommend crops based on weather, NDVI, market prices, and government alerts.
+    
+    Returns top 3 crops ranked by suitability score.
+    """
+    try:
+        # Resolve location
+        weather, geo_info, lat, lon = await resolve_weather_context(
+            location=location,
+            latitude=latitude,
+            longitude=longitude,
+            state=state,
+            district=district,
+            village=village,
+        )
+        
+        # Fetch NDVI (use default crop for NDVI context, doesn't affect scoring)
+        ndvi_latest, ndvi_change, ndvi_history = await fetch_ndvi_context(lat, lon, "cotton")
+        
+        # Fetch government alerts
+        gov_alerts = await fetch_gov_alerts(lat, lon)
+        
+        # Load market prices
+        market_data = load_json_file(os.path.join(DATA_PATH, "market_prices.json"))
+        
+        # Score all crops
+        results = []
+        for crop_name, crop_meta in crop_metadata.items():
+            # Get market price for this crop
+            crop_market = market_data.get(crop_name.lower(), {})
+            market_price = crop_market.get("price") if isinstance(crop_market, dict) else None
+            
+            # Score the crop
+            score, reason = score_crop(
+                crop_name=crop_name,
+                weather=weather,
+                ndvi=ndvi_latest,
+                ndvi_change=ndvi_change,
+                gov_alerts=gov_alerts,
+                market_price=market_price,
+                crop_meta=crop_meta,
+                district=geo_info.get("district") or district,
+            )
+            
+            results.append({
+                "crop": crop_name,
+                "score": score,
+                "reason": reason,
+            })
+        
+        # Sort by score (descending) and return top 3
+        results = sorted(results, key=lambda x: x["score"], reverse=True)[:3]
+        
+        return JSONResponse({
+            "location": f"{lat},{lon}",
+            "recommended": results,
+        })
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating crop recommendations: {str(e)}")
+
+
+@router.get("/advisory/{crop_name}/explain")
+async def get_advisory_explanation(
+    crop_name: str,
+    location: Optional[str] = None,
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
+    state: Optional[str] = None,
+    district: Optional[str] = None,
+    village: Optional[str] = None,
+):
+    """Get explanation-only for an advisory (without full advisory data)."""
+    try:
+        # Reuse advisory generation logic
+        crop = crop_name.lower()
+        weather, geo_info, lat, lon = await resolve_weather_context(
+            location=location,
+            latitude=latitude,
+            longitude=longitude,
+            state=state,
+            district=district,
+            village=village,
+        )
+        ndvi_latest, ndvi_change, ndvi_history = await fetch_ndvi_context(lat, lon, crop)
+        user_context = {
+            "user_district": geo_info.get("district"),
+            "district": geo_info.get("district"),
+            "state": geo_info.get("state"),
+            "location": weather.get("location"),
+            "ndvi": ndvi_latest,
+            "ndvi_change": ndvi_change,
+        }
+        
+        market = await fetch_market_price(crop, geo_info.get("district"))
+        
+        # Build features and evaluate rules
+        crop_health_data = load_json_file(os.path.join(DATA_PATH, "crop_health.json"))
+        crop_health = crop_health_data.get(crop, {})
+        
+        features = combine_features(weather, crop_health, market)
+        if ndvi_latest is not None:
+            features["ndvi"] = ndvi_latest
+        if ndvi_change is not None:
+            features["ndvi_change"] = ndvi_change
+        features["market_price"] = market.get("price")
+        features["price_change_percent"] = market.get("price_change_percent", 0.0)
+        
+        advisory_fields, score, fired_rules, breakdown = build_advisory_from_features(
+            crop, features, user_context, gov_alerts=None
+        )
+        
+        # Generate explanation
+        crop_meta = crop_metadata.get(crop, {})
+        explanation = explain_advisory(
+            breakdown,
+            fired_rules,
+            advisory_fields["metrics"],
+            crop_meta,
+            score,
+            district=geo_info.get("district") or district,
+        )
+        
+        return JSONResponse(explanation)
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating explanation: {str(e)}")
 
 
 async def enhance_advisory_with_rules(advisory: Dict[str, Any], crop_name: str) -> Dict[str, Any]:
@@ -631,13 +983,27 @@ async def enhance_advisory_with_rules(advisory: Dict[str, Any], crop_name: str) 
             "location": weather.get("location"),
         }
 
-        fields, score, fired, breakdown = build_advisory_from_features(crop, features, user_context)
+        fields, score, fired, breakdown = build_advisory_from_features(
+            crop, features, user_context, gov_alerts=None
+        )
+
+        # Generate explanation
+        crop_meta = crop_metadata.get(crop, {})
+        explanation = explain_advisory(
+            breakdown,
+            fired,
+            fields["metrics"],
+            crop_meta,
+            score,
+            district=geo_info.get("district"),
+        )
 
         advisory["fired_rules"] = fired
         advisory["rule_score"] = score
         advisory["rule_breakdown"] = breakdown
         advisory.setdefault("summary", fields["summary"])
         advisory["alerts"] = fields["alerts"]
+        advisory["explanation"] = explanation
         advisory.setdefault("metrics", {}).update({k: v for k, v in fields["metrics"].items() if v is not None})
         if ndvi_history:
             advisory["metrics"]["ndvi_history"] = ndvi_history
@@ -686,20 +1052,32 @@ async def generate_advisory(
         if ndvi_change is not None:
             user_context.setdefault("ndvi_change", ndvi_change)
 
-        advisory_fields, max_score, fired_rules, breakdown = build_advisory_from_features(crop, features, user_context)
+        advisory_fields, max_score, fired_rules, breakdown = build_advisory_from_features(
+            crop, features, user_context, gov_alerts=None
+        )
 
         if ndvi_history:
             advisory_fields.setdefault("metrics", {}).setdefault("ndvi_history", ndvi_history)
 
+        # Generate explanation
+        crop_meta = crop_metadata.get(crop, {})
+        explanation = explain_advisory(
+            breakdown,
+            fired_rules,
+            advisory_fields["metrics"],
+            crop_meta,
+            max_score,
+            district=user_context.get("district"),
+        )
+
+        # Severity is already set by build_advisory_from_features after gov boost
+        severity = advisory_fields.get("severity", "low")
         if max_score >= 0.8:
             priority = "High"
-            severity = "High"
         elif max_score >= 0.6:
             priority = "Medium"
-            severity = "Medium"
         else:
             priority = "Low"
-            severity = "Low"
 
         recommendations: List[Dict[str, Any]] = []
         if "pest" in breakdown and breakdown["pest"]["fired"]:
@@ -736,6 +1114,7 @@ async def generate_advisory(
             "summary": advisory_fields["summary"],
             "alerts": advisory_fields["alerts"],
             "metrics": advisory_fields["metrics"],
+            "explanation": explanation,
             "data_sources": {
                 "weather": "Open-Meteo",
                 "satellite": "Bhuvan",
