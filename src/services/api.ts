@@ -1,6 +1,47 @@
 import axios from "axios";
 import type { DashboardResponse, AdvisoryResponse } from "../types/fusion";
 
+// ============================================================================
+// Community/Post Types
+// ============================================================================
+
+export interface Post {
+  id: number;
+  content: string;
+  author_id: number;
+  author?: {
+    id: number;
+    name: string | null;
+    email: string;
+  };
+  author_name?: string | null;
+  region?: string | null;
+  likes_count: number;
+  comments_count: number;
+  image_url?: string | null;
+  created_at: string;
+  is_liked: boolean;
+}
+
+export interface CreatePostData {
+  content: string;
+  region?: string;
+  image_url?: string;
+}
+
+export interface Comment {
+  id: number;
+  post_id: number;
+  user_id: number;
+  author_name?: string | null;
+  content: string;
+  created_at: string;
+}
+
+export interface CreateCommentData {
+  content: string;
+}
+
 // Backend API base URL - adjust this if your backend runs on a different port
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -339,6 +380,155 @@ export const getAdvisory = async (cropName: string): Promise<AdvisoryResponse> =
       throw new Error("Unable to reach server. Please check your internet connection and try again.");
     } else {
       throw new Error(error.message || "An unexpected error occurred while loading advisory.");
+    }
+  }
+};
+
+// ============================================================================
+// Community API Functions
+// ============================================================================
+
+/**
+ * Fetch all community posts
+ */
+export const getCommunityPosts = async (): Promise<Post[]> => {
+  try {
+    const response = await api.get<Post[]>("/community/posts");
+    return response.data;
+  } catch (error: any) {
+    if (error.response) {
+      const status = error.response.status;
+      const detail = error.response.data?.detail || error.response.data?.message;
+      
+      if (status === 401) {
+        throw new Error("Please login to view community posts.");
+      } else if (status === 500) {
+        throw new Error("Server error while loading posts. Please try again later.");
+      } else {
+        throw new Error(detail || "Failed to load posts. Please try again.");
+      }
+    } else if (error.request) {
+      throw new Error("Unable to reach server. Please check your internet connection and try again.");
+    } else {
+      throw new Error(error.message || "An unexpected error occurred while loading posts.");
+    }
+  }
+};
+
+/**
+ * Create a new post
+ */
+export const createPost = async (postData: CreatePostData): Promise<Post> => {
+  try {
+    const response = await api.post<Post>("/community/posts", postData);
+    return response.data;
+  } catch (error: any) {
+    if (error.response) {
+      const status = error.response.status;
+      const detail = error.response.data?.detail || error.response.data?.message;
+      
+      if (status === 401) {
+        throw new Error("Please login to create a post.");
+      } else if (status === 400) {
+        throw new Error(detail || "Invalid post data. Please check your input.");
+      } else if (status === 500) {
+        throw new Error("Server error while creating post. Please try again later.");
+      } else {
+        throw new Error(detail || "Failed to create post. Please try again.");
+      }
+    } else if (error.request) {
+      throw new Error("Unable to reach server. Please check your internet connection and try again.");
+    } else {
+      throw new Error(error.message || "An unexpected error occurred while creating post.");
+    }
+  }
+};
+
+/**
+ * Like or unlike a post
+ */
+export const togglePostLike = async (postId: number): Promise<{ post_id: number; likes_count: number; is_liked: boolean }> => {
+  try {
+    const response = await api.post<{ post_id: number; likes_count: number; is_liked: boolean }>(`/community/posts/${postId}/like`);
+    return response.data;
+  } catch (error: any) {
+    if (error.response) {
+      const status = error.response.status;
+      const detail = error.response.data?.detail || error.response.data?.message;
+      
+      if (status === 401) {
+        throw new Error("Please login to like posts.");
+      } else if (status === 404) {
+        throw new Error("Post not found.");
+      } else if (status === 500) {
+        throw new Error("Server error while liking post. Please try again later.");
+      } else {
+        throw new Error(detail || "Failed to like post. Please try again.");
+      }
+    } else if (error.request) {
+      throw new Error("Unable to reach server. Please check your internet connection and try again.");
+    } else {
+      throw new Error(error.message || "An unexpected error occurred while liking post.");
+    }
+  }
+};
+
+/**
+ * Get comments for a post
+ */
+export const getPostComments = async (postId: number): Promise<Comment[]> => {
+  try {
+    const response = await api.get<Comment[]>(`/community/posts/${postId}/comments`);
+    return response.data;
+  } catch (error: any) {
+    if (error.response) {
+      const status = error.response.status;
+      const detail = error.response.data?.detail || error.response.data?.message;
+      
+      if (status === 401) {
+        throw new Error("Please login to view comments.");
+      } else if (status === 404) {
+        throw new Error("Post not found.");
+      } else if (status === 500) {
+        throw new Error("Server error while loading comments. Please try again later.");
+      } else {
+        throw new Error(detail || "Failed to load comments. Please try again.");
+      }
+    } else if (error.request) {
+      throw new Error("Unable to reach server. Please check your internet connection and try again.");
+    } else {
+      throw new Error(error.message || "An unexpected error occurred while loading comments.");
+    }
+  }
+};
+
+/**
+ * Add a comment to a post
+ */
+export const createComment = async (postId: number, commentData: CreateCommentData): Promise<Comment> => {
+  try {
+    const response = await api.post<Comment>(`/community/posts/${postId}/comments`, commentData);
+    return response.data;
+  } catch (error: any) {
+    if (error.response) {
+      const status = error.response.status;
+      const detail = error.response.data?.detail || error.response.data?.message;
+      
+      if (status === 401) {
+        throw new Error("Please login to comment.");
+      } else if (status === 404) {
+        throw new Error("Post not found.");
+      } else if (status === 400) {
+        throw new Error(detail || "Invalid comment data. Please check your input.");
+      } else if (status === 500) {
+        throw new Error("Server error while creating comment. Please try again later.");
+      } else {
+        throw new Error(detail || "Failed to create comment. Please try again.");
+      }
+    } else if (error.request) {
+      throw new Error("Unable to reach server. Please check your internet connection and try again.");
+    } else {
+      throw new Error(error.message || "An unexpected error occurred while creating comment.");
     }
   }
 };

@@ -5,6 +5,7 @@ These schemas define the structure of data sent to and received from the API.
 """
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
+from datetime import datetime
 
 
 class UserBase(BaseModel):
@@ -57,6 +58,64 @@ class UserOut(UserBase):
     district: Optional[str] = None
     village: Optional[str] = None
     is_active: bool
+
+    class Config:
+        from_attributes = True
+
+
+# ============================================================================
+# Community/Post Schemas
+# ============================================================================
+
+class PostBase(BaseModel):
+    content: str
+    region: Optional[str] = None
+    image_url: Optional[str] = None
+
+
+class PostCreate(PostBase):
+    pass
+
+
+class PostAuthor(BaseModel):
+    id: int
+    name: Optional[str] = None
+    email: str
+
+    class Config:
+        from_attributes = True
+
+
+class PostOut(PostBase):
+    id: int
+    author_id: int
+    author: Optional[PostAuthor] = None
+    author_name: Optional[str] = None  # For backward compatibility
+    region: Optional[str] = None
+    likes_count: int
+    comments_count: int
+    created_at: datetime
+    is_liked: bool = False  # Whether current user liked this post
+
+    class Config:
+        from_attributes = True
+
+
+class PostLikeCreate(BaseModel):
+    post_id: int
+
+
+class CommentCreate(BaseModel):
+    content: str
+
+
+class CommentOut(BaseModel):
+    id: int
+    post_id: int
+    user_id: int
+    author_name: Optional[str] = None
+    content: str
+    created_at: datetime
 
     class Config:
         from_attributes = True

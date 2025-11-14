@@ -1,0 +1,211 @@
+"""
+Community/Posts API endpoints.
+
+Handles post creation, fetching, liking, and commenting.
+"""
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from sqlalchemy import desc
+from typing import List
+from datetime import datetime
+
+from .database import get_db
+from .models import Post, PostLike, Comment, User
+from .schemas import PostCreate, PostOut, PostLikeCreate, CommentCreate, CommentOut
+from .auth import get_current_user
+
+router = APIRouter(prefix="/community", tags=["community"])
+
+
+# ============================================================================
+# Posts Endpoints
+# ============================================================================
+
+@router.get("/posts", response_model=List[PostOut])
+async def get_posts(
+    skip: int = 0,
+    limit: int = 50,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get all posts with author information and like status."""
+    posts = db.query(Post).order_by(desc(Post.created_at)).offset(skip).limit(limit).all()
+    
+    result = []
+    for post in posts:
+        # Get author info
+        author = db.query(User).filter(User.id == post.author_id).first()
+        
+        # Check if current user liked this post
+        is_liked = db.query(PostLike).filter(
+            PostLike.post_id == post.id,
+            PostLike.user_id == current_user.id
+        ).first() is not None
+        
+        post_dict = {
+            "id": post.id,
+            "content": post.content,
+            "author_id": post.author_id,
+            "author": {
+                "id": author.id,
+                "name": author.name,
+                "email": author.email
+            } if author else None,
+            "author_name": author.name if author else None,
+            "region": post.region or (author.state if author else None),
+            "likes_count": post.likes_count,
+            "comments_count": post.comments_count,
+            "image_url": post.image_url,
+            "created_at": post.created_at,
+            "is_liked": is_liked
+        }
+        result.append(PostOut(**post_dict))
+    
+    return result
+
+
+@router.post("/posts", response_model=PostOut, status_code=status.HTTP_201_CREATED)
+async def create_post(
+    post_data: PostCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Create a new post."""
+    # Use user's state as region if not provided
+    region = post_data.region or current_user.state
+    
+    db_post = Post(
+        content=post_data.content,
+        author_id=current_user.id,
+        region=region,
+        image_url=post_data.image_url,
+        likes_count=0,
+        comments_count=0
+    )
+    db.add(db_post)
+    db.commit()
+    db.refresh(db_post)
+    
+    # Return with author info
+    author = db.query(User).filter(User.id == db_post.author_id).first()
+    return PostOut(
+        id=db_post.id,
+        content=db_post.content,
+        author_id=db_post.author_id,
+        author={
+            "id": author.id,
+            "name": author.name,
+            "email": author.email
+        } if author else None,
+        author_name=author.name if author else None,
+        region=db_post.region,
+        likes_count=db_post.likes_count,
+        comments_count=db_post.comments_count,
+        image_url=db_post.image_url,
+        created_at=db_post.created_at,
+        is_liked=False
+    )
+
+
+@router.post("/posts/{post_id}/like", response_model=dict)
+async def toggle_like(
+    post_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Like or unlike a post."""
+    post = db.query(Post).filter(Post.id == post_id).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    
+    # Check if user already liked
+    existing_like = db.query(PostLike).filter(
+        PostLike.post_id == post_id,
+        PostLike.user_id == current_user.id
+    ).first()
+    
+    if existing_like:
+        # Unlike: remove the like
+        db.delete(existing_like)
+        post.likes_count = max(0, post.likes_count - 1)
+        is_liked = False
+    else:
+        # Like: add the like
+        new_like = PostLike(post_id=post_id, user_id=current_user.id)
+        db.add(new_like)
+        post.likes_count += 1
+        is_liked = True
+    
+    db.commit()
+    
+    return {
+        "post_id": post_id,
+        "likes_count": post.likes_count,
+        "is_liked": is_liked
+    }
+
+
+# ============================================================================
+# Comments Endpoints
+# ============================================================================
+
+@router.get("/posts/{post_id}/comments", response_model=List[CommentOut])
+async def get_comments(
+    post_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get all comments for a post."""
+    post = db.query(Post).filter(Post.id == post_id).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    
+    comments = db.query(Comment).filter(Comment.post_id == post_id).order_by(Comment.created_at).all()
+    
+    result = []
+    for comment in comments:
+        author = db.query(User).filter(User.id == comment.user_id).first()
+        result.append(CommentOut(
+            id=comment.id,
+            post_id=comment.post_id,
+            user_id=comment.user_id,
+            author_name=author.name if author else None,
+            content=comment.content,
+            created_at=comment.created_at
+        ))
+    
+    return result
+
+
+@router.post("/posts/{post_id}/comments", response_model=CommentOut, status_code=status.HTTP_201_CREATED)
+async def create_comment(
+    post_id: int,
+    comment_data: CommentCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Add a comment to a post."""
+    post = db.query(Post).filter(Post.id == post_id).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    
+    db_comment = Comment(
+        post_id=post_id,
+        user_id=current_user.id,
+        content=comment_data.content
+    )
+    db.add(db_comment)
+    post.comments_count += 1
+    db.commit()
+    db.refresh(db_comment)
+    
+    author = db.query(User).filter(User.id == current_user.id).first()
+    return CommentOut(
+        id=db_comment.id,
+        post_id=db_comment.post_id,
+        user_id=db_comment.user_id,
+        author_name=author.name if author else None,
+        content=db_comment.content,
+        created_at=db_comment.created_at
+    )
+
