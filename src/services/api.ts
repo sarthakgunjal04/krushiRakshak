@@ -56,6 +56,18 @@ export interface UploadImageResponse {
   url: string;
 }
 
+export interface UpdatePostData {
+  content?: string;
+  crop?: string;
+  category?: string;
+  image_url?: string;
+}
+
+export interface TrendingTopic {
+  tag: string;
+  count: number;
+}
+
 // Backend API base URL - adjust this if your backend runs on a different port
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -131,6 +143,7 @@ export interface SignupData {
 }
 
 export interface User {
+  id?: number;
   name: string;
   email: string;
   phone?: string;
@@ -656,6 +669,125 @@ export const uploadImage = async (file: File): Promise<string> => {
       throw error;
     }
     throw new Error("An unexpected error occurred while uploading image.");
+  }
+};
+
+/**
+ * Get posts by a specific user
+ */
+export const getUserPosts = async (userId: number): Promise<Post[]> => {
+  try {
+    const response = await api.get<Post[]>(`/community/user/${userId}/posts`);
+    return response.data;
+  } catch (error: any) {
+    if (error.response) {
+      const status = error.response.status;
+      const detail = error.response.data?.detail || error.response.data?.message;
+      
+      if (status === 401) {
+        throw new Error("Please login to view user posts.");
+      } else if (status === 404) {
+        throw new Error("User not found.");
+      } else if (status === 500) {
+        throw new Error("Server error while loading user posts. Please try again later.");
+      } else {
+        throw new Error(detail || "Failed to load user posts. Please try again.");
+      }
+    } else if (error.request) {
+      throw new Error("Unable to reach server. Please check your internet connection and try again.");
+    } else {
+      throw new Error(error.message || "An unexpected error occurred while loading user posts.");
+    }
+  }
+};
+
+/**
+ * Update a post
+ */
+export const updatePost = async (postId: number, postData: UpdatePostData): Promise<Post> => {
+  try {
+    const response = await api.put<Post>(`/community/posts/${postId}`, postData);
+    return response.data;
+  } catch (error: any) {
+    if (error.response) {
+      const status = error.response.status;
+      const detail = error.response.data?.detail || error.response.data?.message;
+      
+      if (status === 401) {
+        throw new Error("Please login to edit posts.");
+      } else if (status === 403) {
+        throw new Error("You can only edit your own posts.");
+      } else if (status === 404) {
+        throw new Error("Post not found.");
+      } else if (status === 400) {
+        throw new Error(detail || "Invalid post data. Please check your input.");
+      } else if (status === 500) {
+        throw new Error("Server error while updating post. Please try again later.");
+      } else {
+        throw new Error(detail || "Failed to update post. Please try again.");
+      }
+    } else if (error.request) {
+      throw new Error("Unable to reach server. Please check your internet connection and try again.");
+    } else {
+      throw new Error(error.message || "An unexpected error occurred while updating post.");
+    }
+  }
+};
+
+/**
+ * Delete a post
+ */
+export const deletePost = async (postId: number): Promise<void> => {
+  try {
+    await api.delete(`/community/posts/${postId}`);
+  } catch (error: any) {
+    if (error.response) {
+      const status = error.response.status;
+      const detail = error.response.data?.detail || error.response.data?.message;
+      
+      if (status === 401) {
+        throw new Error("Please login to delete posts.");
+      } else if (status === 403) {
+        throw new Error("You can only delete your own posts.");
+      } else if (status === 404) {
+        throw new Error("Post not found.");
+      } else if (status === 500) {
+        throw new Error("Server error while deleting post. Please try again later.");
+      } else {
+        throw new Error(detail || "Failed to delete post. Please try again.");
+      }
+    } else if (error.request) {
+      throw new Error("Unable to reach server. Please check your internet connection and try again.");
+    } else {
+      throw new Error(error.message || "An unexpected error occurred while deleting post.");
+    }
+  }
+};
+
+/**
+ * Get trending topics (hashtags)
+ */
+export const getTrendingTopics = async (limit: number = 10): Promise<TrendingTopic[]> => {
+  try {
+    const response = await api.get<TrendingTopic[]>(`/community/trending?limit=${limit}`);
+    return response.data;
+  } catch (error: any) {
+    if (error.response) {
+      const status = error.response.status;
+      const detail = error.response.data?.detail || error.response.data?.message;
+      
+      if (status === 401) {
+        throw new Error("Please login to view trending topics.");
+      } else if (status === 500) {
+        throw new Error("Server error while loading trending topics. Please try again later.");
+      } else {
+        throw new Error(detail || "Failed to load trending topics. Please try again.");
+      }
+    } else if (error.request) {
+      throw new Error("Unable to reach server. Please check your internet connection and try again.");
+    } else {
+      throw new Error(error.message || "An unexpected error occurred while loading trending topics.");
+    }
   }
 };
 

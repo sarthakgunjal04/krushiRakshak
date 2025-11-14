@@ -79,6 +79,13 @@ class PostCreate(PostBase):
     pass
 
 
+class PostUpdate(BaseModel):
+    content: Optional[str] = None
+    crop: Optional[str] = None
+    category: Optional[str] = None
+    image_url: Optional[str] = None
+
+
 class PostAuthor(BaseModel):
     id: int
     name: Optional[str] = None

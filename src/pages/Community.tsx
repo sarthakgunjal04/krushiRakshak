@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -13,15 +14,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Heart, MessageCircle, Share2, Plus, TrendingUp, Loader2, Send, Search } from "lucide-react";
+import { Heart, MessageCircle, Share2, Plus, TrendingUp, Loader2, Send, Search, Edit, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { getCommunityPosts, togglePostLike, createPost, getPostComments, createComment, getTopContributors, uploadImage, searchPosts, type Post, type CreatePostData, type Comment, type TopContributor } from "@/services/api";
+import { getCommunityPosts, togglePostLike, createPost, getPostComments, createComment, getTopContributors, uploadImage, searchPosts, updatePost, deletePost, getTrendingTopics, getCurrentUser, type Post, type CreatePostData, type Comment, type TopContributor, type TrendingTopic } from "@/services/api";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const Community = () => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [posts, setPosts] = useState<Post[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -43,8 +45,28 @@ const Community = () => {
   const [postingComment, setPostingComment] = useState<number | null>(null);
   const [topContributors, setTopContributors] = useState<TopContributor[]>([]);
   const [loadingContributors, setLoadingContributors] = useState(true);
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+  const [editingPostId, setEditingPostId] = useState<number | null>(null);
+  const [isEditingPost, setIsEditingPost] = useState(false);
+  const [trendingTopics, setTrendingTopics] = useState<TrendingTopic[]>([]);
+  const [loadingTrending, setLoadingTrending] = useState(true);
 
-  // Fetch posts and top contributors on component mount and when filters change
+  // Get current user ID on mount
+  useEffect(() => {
+    const fetchCurrentUser = async () => {
+      try {
+        const user = await getCurrentUser();
+        if (user.id) {
+          setCurrentUserId(user.id);
+        }
+      } catch (err) {
+        // User not logged in or error - ignore
+      }
+    };
+    fetchCurrentUser();
+  }, []);
+
+  // Fetch posts, top contributors, and trending topics on component mount and when filters change
   useEffect(() => {
     if (searchQuery.trim()) return; // Don't fetch if searching
     
@@ -56,18 +78,21 @@ const Community = () => {
         if (selectedCrop && selectedCrop !== "all") filters.crop = selectedCrop;
         if (selectedCategory && selectedCategory !== "all") filters.category = selectedCategory;
         
-        const [postsData, contributorsData] = await Promise.all([
+        const [postsData, contributorsData, trendingData] = await Promise.all([
           getCommunityPosts(Object.keys(filters).length > 0 ? filters : undefined),
-          getTopContributors(10)
+          getTopContributors(10),
+          getTrendingTopics(10).catch(() => []) // Fallback to empty array if error
         ]);
         setPosts(postsData);
         setTopContributors(contributorsData);
+        setTrendingTopics(trendingData);
       } catch (err: any) {
         setError(err.message || "Failed to load posts");
         toast.error(err.message || "Failed to load community posts");
       } finally {
         setIsLoading(false);
         setLoadingContributors(false);
+        setLoadingTrending(false);
       }
     };
     fetchData();
@@ -260,6 +285,89 @@ const Community = () => {
     }
   };
 
+  // Handle edit post
+  const handleEditPost = (post: Post) => {
+    setEditingPostId(post.id);
+    setPostContent(post.content);
+    setPostCrop(post.crop || "none");
+    setPostCategory(post.category || "none");
+    setPostImageFile(null);
+    setIsEditingPost(true);
+    setIsPostModalOpen(true);
+  };
+
+  // Handle delete post
+  const handleDeletePost = async (postId: number) => {
+    if (!confirm(t("community.confirm_delete") || "Are you sure you want to delete this post?")) {
+      return;
+    }
+
+    try {
+      await deletePost(postId);
+      setPosts(posts.filter(post => post.id !== postId));
+      toast.success(t("community.post_deleted") || "Post deleted successfully");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete post");
+    }
+  };
+
+  // Handle update post
+  const handleUpdatePost = async () => {
+    if (!postContent.trim() || !editingPostId) {
+      toast.error(t("community.post_content_required"));
+      return;
+    }
+
+    setIsCreatingPost(true);
+    let imageUrl: string | undefined = undefined;
+
+    // Upload image if selected
+    if (postImageFile) {
+      setIsUploadingImage(true);
+      try {
+        imageUrl = await uploadImage(postImageFile);
+      } catch (err: any) {
+        setIsUploadingImage(false);
+        setIsCreatingPost(false);
+        toast.error(err.message || "Failed to upload image");
+        return;
+      }
+      setIsUploadingImage(false);
+    }
+
+    try {
+      const updateData: { content: string; crop?: string; category?: string; image_url?: string } = {
+        content: postContent.trim(),
+        crop: postCrop && postCrop !== "none" ? postCrop : undefined,
+        category: postCategory && postCategory !== "none" ? postCategory : undefined,
+      };
+      if (imageUrl) {
+        updateData.image_url = imageUrl;
+      }
+
+      const updatedPost = await updatePost(editingPostId, updateData);
+      
+      // Update the post in the list
+      setPosts(posts.map(post => 
+        post.id === editingPostId ? updatedPost : post
+      ));
+      
+      // Reset form and close modal
+      setPostContent("");
+      setPostImageFile(null);
+      setPostCrop("none");
+      setPostCategory("none");
+      setEditingPostId(null);
+      setIsEditingPost(false);
+      setIsPostModalOpen(false);
+      toast.success(t("community.post_updated") || "Post updated successfully");
+    } catch (err: any) {
+      toast.error(err.message || t("community.post_update_error") || "Failed to update post");
+    } finally {
+      setIsCreatingPost(false);
+    }
+  };
+
   // Format timestamp
   const formatTimestamp = (dateString: string) => {
     const date = new Date(dateString);
@@ -359,8 +467,31 @@ const Community = () => {
                       </Avatar>
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <h3 className="font-semibold">{post.author_name || post.author?.name || "Unknown"}</h3>
+                          <h3 
+                            className="font-semibold cursor-pointer hover:text-primary transition-colors"
+                            onClick={() => navigate(`/profile/${post.author_id}`)}
+                          >
+                            {post.author_name || post.author?.name || "Unknown"}
+                          </h3>
                           <span className="text-sm text-muted-foreground">• {post.region || "Unknown"}</span>
+                          {currentUserId === post.author_id && (
+                            <div className="flex items-center gap-2 ml-auto">
+                              <button
+                                onClick={() => handleEditPost(post)}
+                                className="text-muted-foreground hover:text-primary transition-colors"
+                                title={t("community.edit_post") || "Edit post"}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDeletePost(post.id)}
+                                className="text-muted-foreground hover:text-destructive transition-colors"
+                                title={t("community.delete_post") || "Delete post"}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          )}
                           {post.crop && (
                             <Badge variant="outline" className="text-xs">
                               {post.crop}
@@ -581,16 +712,38 @@ const Community = () => {
             {/* Trending Topics */}
             <Card className="p-6 bg-gradient-card">
               <h3 className="font-heading font-bold mb-4">{t("community.trending_topics")}</h3>
-              <div className="space-y-2">
-                {["#OrganicFarming", "#PestControl", "#IrrigationTips", "#WeatherUpdate"].map((tag) => (
-                  <button
-                    key={tag}
-                    className="block w-full text-left px-3 py-2 rounded-md bg-muted hover:bg-muted/70 transition-colors text-sm font-medium text-primary"
-                  >
-                    {tag}
-                  </button>
-                ))}
-              </div>
+              {loadingTrending ? (
+                <div className="space-y-2">
+                  {[1, 2, 3, 4].map((i) => (
+                    <Skeleton key={i} className="h-10 w-full" />
+                  ))}
+                </div>
+              ) : trendingTopics.length > 0 ? (
+                <div className="space-y-2">
+                  {trendingTopics.map((topic) => (
+                    <button
+                      key={topic.tag}
+                      className="block w-full text-left px-3 py-2 rounded-md bg-muted hover:bg-muted/70 transition-colors text-sm font-medium text-primary"
+                      onClick={() => {
+                        setSearchQuery(`#${topic.tag}`);
+                      }}
+                    >
+                      #{topic.tag} ({topic.count})
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {["#OrganicFarming", "#PestControl", "#IrrigationTips", "#WeatherUpdate"].map((tag) => (
+                    <button
+                      key={tag}
+                      className="block w-full text-left px-3 py-2 rounded-md bg-muted hover:bg-muted/70 transition-colors text-sm font-medium text-primary"
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              )}
             </Card>
           </div>
         </div>
@@ -600,9 +753,9 @@ const Community = () => {
       <Dialog open={isPostModalOpen} onOpenChange={setIsPostModalOpen}>
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
-            <DialogTitle>{t("community.create_post")}</DialogTitle>
+            <DialogTitle>{isEditingPost ? (t("community.edit_post") || "Edit Post") : t("community.create_post")}</DialogTitle>
             <DialogDescription>
-              {t("community.create_post_description")}
+              {isEditingPost ? (t("community.edit_post_description") || "Update your post") : t("community.create_post_description")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -659,13 +812,15 @@ const Community = () => {
                 setPostImageFile(null);
                 setPostCrop("none");
                 setPostCategory("none");
+                setEditingPostId(null);
+                setIsEditingPost(false);
               }}
               disabled={isCreatingPost}
             >
               {t("community.cancel")}
             </Button>
             <Button
-              onClick={handleCreatePost}
+              onClick={isEditingPost ? handleUpdatePost : handleCreatePost}
               disabled={isCreatingPost || isUploadingImage || !postContent.trim()}
               className="bg-primary hover:bg-primary/90"
             >
@@ -675,7 +830,7 @@ const Community = () => {
                   {isUploadingImage ? t("community.uploading_image") : t("community.posting")}
                 </>
               ) : (
-                t("community.post")
+                isEditingPost ? (t("community.update") || "Update") : t("community.post")
               )}
             </Button>
           </DialogFooter>

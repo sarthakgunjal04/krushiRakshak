@@ -38,7 +38,7 @@ const Contact = () => {
               <Phone className="h-6 w-6 text-secondary" />
             </div>
             <h3 className="font-semibold mb-2">{t("contact.call_title")}</h3>
-            <p className="text-sm text-muted-foreground">+91 1800-XXX-XXXX</p>
+            <p className="text-sm text-muted-foreground">+91 91680-123-XXXX</p>
           </Card>
 
           <Card className="p-6 text-center hover:shadow-hover transition-all bg-gradient-card">
@@ -46,7 +46,7 @@ const Contact = () => {
               <MapPin className="h-6 w-6 text-accent" />
             </div>
             <h3 className="font-semibold mb-2">{t("contact.visit_title")}</h3>
-            <p className="text-sm text-muted-foreground">Mumbai, Maharashtra</p>
+            <p className="text-sm text-muted-foreground">Nashik, Maharashtra</p>
           </Card>
         </div>
 

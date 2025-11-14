@@ -17,6 +17,7 @@ import Advisory from "./pages/Advisory";
 import Community from "./pages/Community";
 import Report from "./pages/Report";
 import Profile from "./pages/Profile";
+import UserProfile from "./pages/UserProfile";
 import Contact from "./pages/Contact";
 import About from "./pages/About";
 import Install from "./pages/Install";
@@ -45,6 +46,7 @@ const App = () => (
                 <Route path="/community" element={<Community />} />
                 <Route path="/report" element={<Report />} />
                 <Route path="/profile" element={<Profile />} />
+                <Route path="/profile/:userId" element={<UserProfile />} />
                 <Route path="/contact" element={<Contact />} />
                 <Route path="/about" element={<About />} />
                 <Route path="/install" element={<Install />} />
