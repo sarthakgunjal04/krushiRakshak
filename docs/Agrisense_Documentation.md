@@ -1,4 +1,4 @@
-# AgriSense: Smart Farming Assistant
+# KrushiRakshak: Smart Farming Assistant
 ## Farmer Advisory and Risk Management System
 
 ---
@@ -11,7 +11,7 @@
 
 ## Abstract
 
-AgriSense is a web app built to help Indian farmers get better information about their crops. We combine weather data from IMD, satellite images from Bhuvan, market prices from Agmarknet, and let farmers share knowledge with each other. The app works on phones and computers, and it even works when there's no internet.
+KrushiRakshak is a web app built to help Indian farmers get better information about their crops. We combine weather data from IMD, satellite images from Bhuvan, market prices from Agmarknet, and let farmers share knowledge with each other. The app works on phones and computers, and it even works when there's no internet.
 
 The app has an AI chatbot that answers farming questions instantly, a smart system that gives crop-specific advice, and a community section where farmers can share tips and ask questions. It's available in multiple languages and designed for mobile phones first. Our goal is to help farmers make better decisions so they can grow more crops, avoid losses, and earn more money.
 
@@ -57,7 +57,7 @@ Because of these problems, farmers grow less crops, lose money, and don't trust 
 
 ## Objectives
 
-What we want to achieve with AgriSense:
+What we want to achieve with KrushiRakshak:
 
 ### 1. **Put Everything in One Place**
 - Combine weather, satellite images, market prices, and crop health into one app
@@ -101,16 +101,16 @@ What we want to achieve with AgriSense:
 
 ## Proposed Solution
 
-AgriSense solves these problems by building one app that brings together different technologies and data sources. Here's how we built it:
+KrushiRakshak solves these problems by building one app that brings together different technologies and data sources. Here's how we built it:
 
 ### **System Overview**
 
-AgriSense is a web app with two main parts: a frontend built with React that users see and interact with, and a backend built with FastAPI (Python) that does the heavy work. The app connects to external sources like IMD for weather, Agmarknet for market prices, and Bhuvan for satellite images. We built a smart system called the Fusion Engine that uses rules to create helpful advice for farmers.
+KrushiRakshak is a web app with two main parts: a frontend built with React that users see and interact with, and a backend built with FastAPI (Python) that does the heavy work. The app connects to external sources like IMD for weather, Agmarknet for market prices, and Bhuvan for satellite images. We built a smart system called the Fusion Engine that uses rules to create helpful advice for farmers.
 
 ### **Core Components**
 
 #### 1. **Fusion Engine (The Brain of Our System)**
-The Fusion Engine is what makes AgriSense smart. It does these things:
+The Fusion Engine is what makes KrushiRakshak smart. It does these things:
 - Takes data from weather, market, satellite, and crop information and puts it together
 - Uses simple rules to find problems and opportunities
 - Creates specific advice for each crop type with recommendations sorted by importance
@@ -197,7 +197,7 @@ Here's how data moves through the system:
 
 ### **Expected Impact**
 
-What we hope AgriSense will do:
+What we hope KrushiRakshak will do:
 - Help farmers grow more crops by using data to make better decisions
 - Reduce crop losses by warning farmers about problems early
 - Help farmers earn more money by showing them the best time to sell
@@ -530,7 +530,7 @@ Frontend Rendering
 
 ### Page-Wise Overview
 
-The AgriSense frontend consists of 13 main pages, each serving a specific purpose in the application workflow:
+The KrushiRakshak frontend consists of 13 main pages, each serving a specific purpose in the application workflow:
 
 #### 1. **Home Page** (`/`)
 - **Purpose**: Landing page and entry point for new users
@@ -672,7 +672,7 @@ The AgriSense frontend consists of 13 main pages, each serving a specific purpos
 - **Key Components**: Contact cards, contact form
 
 #### 11. **About Page** (`/about`)
-- **Purpose**: Information about AgriSense project
+- **Purpose**: Information about KrushiRakshak project
 - **Features**:
   - Mission statement
   - Community information
@@ -851,8 +851,8 @@ Routing is configured in `src/App.tsx` using React Router DOM:
 
 #### **2. PWA Manifest** (`vite.config.ts`)
 - Configured via `VitePWA` plugin
-- App name: "AgriSense - Smart Farming Assistant"
-- Short name: "AgriSense"
+- App name: "KrushiRakshak - Smart Farming Assistant"
+- Short name: "KrushiRakshak"
 - Icons: 192x192 and 512x512 PNG icons
 - Theme color: `#2E7D32` (green)
 - Display mode: `standalone`
@@ -944,7 +944,7 @@ const Component = () => {
 
 ### Authentication System
 
-The AgriSense backend implements a secure JWT-based authentication system using industry-standard practices.
+The KrushiRakshak backend implements a secure JWT-based authentication system using industry-standard practices.
 
 #### **1. JWT Token Generation**
 
@@ -1228,8 +1228,8 @@ The backend API is organized using FastAPI's router system for modularity and ma
 #### **1. Main Application** (`main.py`)
 
 **FastAPI App Configuration**:
-- Title: "AgriSense Backend API"
-- Description: "Backend API for AgriSense PWA — Farmer advisory and risk management system"
+- Title: "KrushiRakshak Backend API"
+- Description: "Backend API for KrushiRakshak PWA — Farmer advisory and risk management system"
 - Version: "1.0.0"
 - Automatic API documentation at `/docs` (Swagger UI) and `/redoc`
 
@@ -1369,7 +1369,7 @@ async def protected_endpoint(
 
 ### Fusion Engine
 
-The Fusion Engine is the core intelligence layer of AgriSense that combines multiple data sources to generate personalized crop advisories.
+The Fusion Engine is the core intelligence layer of KrushiRakshak that combines multiple data sources to generate personalized crop advisories.
 
 #### **1. Overview**
 
@@ -3253,7 +3253,7 @@ GET /community/posts/search?q=cotton&skip=0&limit=20
 **Response** (200 OK):
 ```json
 {
-  "message": "Welcome to AgriSense Backend API"
+  "message": "Welcome to KrushiRakshak Backend API"
 }
 ```
 
@@ -3314,7 +3314,7 @@ The API provides automatic interactive documentation:
 
 ### System Performance
 
-AgriSense has been successfully implemented as a full-stack Progressive Web Application with the following achievements:
+KrushiRakshak has been successfully implemented as a full-stack Progressive Web Application with the following achievements:
 
 #### **Technical Achievements**
 
@@ -3439,7 +3439,7 @@ AgriSense has been successfully implemented as a full-stack Progressive Web Appl
 
 ## Limitations
 
-While AgriSense provides comprehensive functionality, there are several limitations that should be acknowledged:
+While KrushiRakshak provides comprehensive functionality, there are several limitations that should be acknowledged:
 
 ### 1. **Data Source Dependencies**
 
@@ -3635,7 +3635,7 @@ Based on the current implementation and identified limitations, the following en
 
 ## Conclusion
 
-AgriSense is our attempt to make advanced farming technology available to Indian farmers. We combined different data sources, built a smart advisory system, and created a community where farmers can help each other. This helps solve real problems that farmers face every day.
+KrushiRakshak is our attempt to make advanced farming technology available to Indian farmers. We combined different data sources, built a smart advisory system, and created a community where farmers can help each other. This helps solve real problems that farmers face every day.
 
 ### What We Built
 
@@ -3649,7 +3649,7 @@ The project shows we can:
 
 ### What It Can Do
 
-AgriSense can help:
+KrushiRakshak can help:
 
 - **Grow More Crops**: By using data to make better decisions and catch problems early
 - **Earn More Money**: By showing farmers the best time to sell and reducing losses
@@ -3670,9 +3670,9 @@ The app directly fixes the problems we identified:
 
 ### Looking Ahead
 
-As we continue working on AgriSense, we want it to become the main digital tool for Indian farmers, helping them from planting to harvest. We plan to add machine learning, connect with IoT devices, and expand community features to keep up with what farmers need.
+As we continue working on KrushiRakshak, we want it to become the main digital tool for Indian farmers, helping them from planting to harvest. We plan to add machine learning, connect with IoT devices, and expand community features to keep up with what farmers need.
 
-By combining technology, data, and community, we're creating something that helps farmers make better decisions, avoid losses, and improve their lives. AgriSense isn't just an app—it's our way of making farming smarter and more sustainable.
+By combining technology, data, and community, we're creating something that helps farmers make better decisions, avoid losses, and improve their lives. KrushiRakshak isn't just an app—it's our way of making farming smarter and more sustainable.
 
 ---
 
