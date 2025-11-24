@@ -19,40 +19,57 @@ The app works even when internet is slow or unavailable, making it perfect for r
 - **Offline Support**: Works without internet using cached data
 - **Multi-Language**: Available in English and Marathi (more languages coming soon)
 
+## Why This System Feels Different
+
+- **Hybrid Fusion Engine**: Most dashboards lean only on rule-based heuristics or only on machine learning. Our engine blends both—transparent agronomy rules catch the “must-not-miss” events while lightweight ML scores refine confidence. Farmers see advice they can trust, and we can explain why it fired.
+- **Built-in Community Support**: Shifting conversations away from scattered WhatsApp groups, the community page gives verified farmers a place to post photos, describe issues, and crowdsource fixes. That feedback loop also flows back into the Fusion Engine roadmap.
+
+### Impact in the Field
+
+- Alerts are grounded in data *and* agronomy knowledge, so farmers take action faster.
+- Discussions stay inside KrushiRakshak, helping extension workers monitor trends and respond with empathy.
+- The blended approach reduces false positives and keeps the experience relatable instead of “black-box AI.”
+
 ## System Architecture
+
+KrushiRakshak is organized into four practical layers so the whole story fits inside one diagram.
+
+1. **Layer 1 – Farmer Web App**: React PWA that works offline (IndexedDB + service worker), shows the dashboard, lets farmers share updates, and captures photo + GPS inputs.
+2. **Layer 2 – Middleware / API**: FastAPI handles authentication (JWT), routes Fusion Engine requests, and issues push or SMS alerts when severity is high.
+3. **Layer 3 – Intelligence & Analysis**: ETL jobs keep a feature store fresh, then the Fusion Engine blends ML scores with rule-based logic before the advisory generator packages the final response.
+4. **Layer 4 – Infrastructure & Storage**: PostgreSQL/PostGIS, MinIO/S3 buckets, and the monitoring/admin panel keep data, media, and operations in one place.
+
+External feeds (IMD weather, Agmarknet prices, Bhuvan NDVI, Gemini AI) sit under the diagram and drive the intelligence layer.
 
 ### How It Works
 
 KrushiRakshak has three main parts that work together:
 
-<img width="2692" height="1514" alt="image" src="https://github.com/user-attachments/assets/9e9e4e3b-9bd1-4553-b893-ce9d30ddae9c" />
-
-
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    FRONTEND LAYER                       │
-│  React App (PWA) - User Interface                       │
-│  - Dashboard, Advisory, Community, Profile pages        │
-│  - Works offline with service workers                   │
-│  - Mobile-first responsive design                       │
+│                    FRONTEND LAYER                        │
+│  React App (PWA) - User Interface                        │
+│  - Dashboard, Advisory, Community, Profile pages         │
+│  - Works offline with service workers                    │
+│  - Mobile-first responsive design                         │
 └──────────────────────┬──────────────────────────────────┘
                        │
                        │ HTTP Requests (JSON)
                        │
 ┌──────────────────────▼──────────────────────────────────┐
-│                   BACKEND LAYER                         │
+│                   BACKEND LAYER                          │
 │  FastAPI Server - Business Logic                        │
-│  - Authentication & User Management                     │
-│  - Fusion Engine (combines data sources)                │
-│  - Community Posts & Comments                           │
-│  - AI Chatbot Integration                               │
+│  - Authentication & User Management                      │
+│  - Fusion Engine (combines data sources)                 │
+│  - Community Posts & Comments                            │
+│  - AI Chatbot Integration                                │
 │  - Database (SQLite/PostgreSQL)                         │
 └──────────────────────┬──────────────────────────────────┘
                        │
                        │ API Calls
                        │
 ┌──────────────────────▼──────────────────────────────────┐
-│              EXTERNAL DATA SOURCES                      │
+│              EXTERNAL DATA SOURCES                        │
 │  - IMD Weather API (temperature, rain, wind)            │
 │  - Agmarknet (market prices)                            │
 │  - Bhuvan Satellite (NDVI crop health)                  │
