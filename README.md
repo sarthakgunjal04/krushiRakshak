@@ -161,26 +161,26 @@ Generates crop-specific advice based on:
 
 ```
 agrisense/
-├── src/                    # Frontend React application
-│   ├── pages/             # Main application pages
-│   ├── components/        # Reusable UI components
-│   ├── services/          # API client and services
-│   └── types/             # TypeScript type definitions
-├── backend/                # Backend FastAPI application
-│   ├── app/               # Main application code
-│   │   ├── main.py        # FastAPI app entry point
-│   │   ├── fusion_engine.py  # Core intelligence layer
-│   │   ├── auth.py        # Authentication routes
-│   │   └── community.py   # Community features
-│   ├── data/              # JSON data files (weather, market, etc.)
-│   ├── rules/             # Rule definitions (pest, irrigation, market)
-│   └── services/           # External API integration services
-├── docs/                   # Detailed documentation
-│   ├── Agrisense_Documentation.md  # Complete system documentation (KrushiRakshak)
-│   ├── DEMO_SCRIPT.md     # Demo presentation script
-│   └── dashboardscript.md # Dashboard walkthrough guide
-└── README.md              # This file
+├── src/                     # React + TypeScript PWA
+│   ├── components/          # Shared UI (shadcn/ui)
+│   ├── pages/               # Home, Dashboard, Community, etc.
+│   ├── services/            # API client + auth helpers
+│   └── i18n/, hooks/, context/, lib/…
+├── public/                  # Static assets + PWA manifest
+├── backend/                 # FastAPI service (fusion engine, community, alerts)
+│   ├── app/                 # Routers, models, services
+│   ├── data/                # Weather/market/NDVI JSON feeds
+│   ├── rules/               # Rule configs (pest/irrigation/market)
+│   ├── etl/                 # Feature builder scripts
+│   ├── test_scripts/        # API sanity tests
+│   └── … (uploads/, templates/, migrations/, etc.)
+├── docs/                    # Demo scripts + deep-dive documentation
+├── dist/ , dev-dist/        # Production build artifacts (frontend/PWA)
+├── configuration files      # package.json, tailwind.config.ts, tsconfig*.json, vite.config.ts, eslint.config.js
+└── README.md                # This file
 ```
+
+Need the full FastAPI tree? Check [`backend/README.md`](backend/README.md) for the complete breakdown.
 
 ## Detailed Documentation
 
