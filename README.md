@@ -43,39 +43,8 @@ External feeds (IMD weather, Agmarknet prices, Bhuvan NDVI, Gemini AI) sit under
 
 ### How It Works
 
-KrushiRakshak has three main parts that work together:
+<img width="1723" height="969" alt="image" src="https://github.com/user-attachments/assets/d16edb5d-5c98-4622-8327-eaf0c7ee3287" />
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                    FRONTEND LAYER                        │
-│  React App (PWA) - User Interface                        │
-│  - Dashboard, Advisory, Community, Profile pages         │
-│  - Works offline with service workers                    │
-│  - Mobile-first responsive design                         │
-└──────────────────────┬──────────────────────────────────┘
-                       │
-                       │ HTTP Requests (JSON)
-                       │
-┌──────────────────────▼──────────────────────────────────┐
-│                   BACKEND LAYER                          │
-│  FastAPI Server - Business Logic                        │
-│  - Authentication & User Management                      │
-│  - Fusion Engine (combines data sources)                 │
-│  - Community Posts & Comments                            │
-│  - AI Chatbot Integration                                │
-│  - Database (SQLite/PostgreSQL)                         │
-└──────────────────────┬──────────────────────────────────┘
-                       │
-                       │ API Calls
-                       │
-┌──────────────────────▼──────────────────────────────────┐
-│              EXTERNAL DATA SOURCES                        │
-│  - IMD Weather API (temperature, rain, wind)            │
-│  - Agmarknet (market prices)                            │
-│  - Bhuvan Satellite (NDVI crop health)                  │
-│  - Google Gemini AI (chatbot)                           │
-└─────────────────────────────────────────────────────────┘
-```
 
 ### Data Flow
 
