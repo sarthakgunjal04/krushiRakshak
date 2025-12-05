@@ -1,3 +1,4 @@
+
 # ✅ What’s Already Connected
 
 ### Data packs
@@ -159,4 +160,4 @@ Fires when `abs(ndvi_change) >= 0.08`, flagging noticeable NDVI spikes or drops.
 - **Missing file**: Confirm JSON exists under `backend/data/` (case sensitive).
 - **API unreachable**: Check if `uvicorn` runs on port 8000.
 - **Rule not firing**: Feature names must match exactly (`ndvi_change` vs `NDVIChange` will fail).
-
+   

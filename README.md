@@ -91,7 +91,7 @@ External feeds like IMD weather, Agmarknet prices, Bhuvan NDVI, and Gemini AI fe
 
 1. Clone repo  
    ```bash
-   git clone <your-repo-url>
+   git clone https://github.com/ParthChatupale/AgriSensePro.git
    cd agrisense
    ```
 2. Install frontend deps  
@@ -120,9 +120,10 @@ External feeds like IMD weather, Agmarknet prices, Bhuvan NDVI, and Gemini AI fe
 7. Open in browser  
    - Frontend: <http://localhost:8080>  
    - Backend docs: <http://localhost:8000/docs>
+
 ## Project Structure
 
-```bash
+```markdown
 agrisense/
 ├── src/
 │   ├── components/
