@@ -198,7 +198,7 @@ Then suggests **clear next actions**.
 ### Step 1: Clone the Repository
 
 ```bash
-git clone https://github.com/ParthChatupale/AgriSensePro.git
+git clone https://github.com/sarthakgunjal04/krushiRakshak.git
 cd agrisense
 ```
 
@@ -309,3 +309,4 @@ npm run build
 Copyright © 2025 KrushiRakshak
 
 ## Support
+
