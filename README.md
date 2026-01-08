@@ -193,41 +193,44 @@ Then suggests **clear next actions**.
 - Python 3.11+  
 - Git  
 
-### Installation
+## Installation
 
-#### 1. Clone the repository
+### Step 1: Clone the Repository
+
 ```bash
 git clone https://github.com/ParthChatupale/AgriSensePro.git
 cd agrisense
-2. Install frontend dependencies
-npm install
+```
 
-3. Install backend dependencies
+### Step 2: Install Frontend Dependencies
+```bash
+npm install
+```
+### 3. Install backend dependencies
+```bash
 cd backend
 python -m venv .venv
 .venv\Scripts\Activate        # Windows
 source .venv/bin/activate    # macOS/Linux
 pip install -r requirements.txt
+```
 
-4. Environment variables
-
-Copy .env.example → .env
-
-Add required API keys
-
-5. Start backend
+### 4. Start backend
+```bash
 uvicorn app.main:app --reload --port 8000
+```
 
-6. Start frontend
+### 5. Start frontend
+```bash
 npm run dev
-
-7. Open in browser
-
+```
+### 6. Open in browser
 Frontend: http://localhost:8080
 
 Backend Docs: http://localhost:8000/docs
 
-Project Structure
+### Project Structure
+```bash
 agrisense/
 ├── src/
 │   ├── components/
@@ -250,53 +253,59 @@ agrisense/
 ├── dev-dist/
 └── README.md
 
-
+```
 For backend details, see backend/README.md.
 
-Development
-Running Tests
-npm run test
-cd backend && pytest app/tests
+## Detailed Documentation
 
-Production Build
+- `docs/Agrisense_Documentation.md`
+- `backend/README.md`
+- `backend/FUSION_ENGINE_SETUP.md`
+- `backend/test_scripts/README.md`
+- `INTEGRATION_GUIDE.md`
+- `docs/DEMO_SCRIPT.md`
+- `docs/dashboardscript.md`
+
+## Development
+
+### Running Tests
+
+```bash
+npm run test        # frontend
+cd backend && pytest app/tests
+```
+
+### Production Builds
+
+```bash
+# Frontend bundle
 npm run build
 
-Deployment
-Frontend
+# Backend: deploy FastAPI using your hosting target
+```
 
-Deploy the dist/ folder to:
+## Deployment
 
-Netlify
+### Frontend
+- Build with `npm run build` and deploy `dist/` to Netlify, Vercel, AWS S3/CloudFront, GitHub Pages, etc.
 
-Vercel
+### Backend
+- Configure environment variables (same keys as `.env`).
+- Deploy FastAPI to Render, Railway, Heroku, AWS EC2, Azure App Service, etc.
+- Update the frontend `config.ts` with the live backend URL.
 
-AWS S3 + CloudFront
+## Contributing
 
-GitHub Pages
+1. Fork the repo
+2. Create a branch (`git checkout -b feature/xyz`)
+3. Make changes
+4. Run tests (`npm run lint`, `npm run test`)
+5. Commit (`git commit -m "feat: ... "`)
+6. Push (`git push origin feature/xyz`)
+7. Open a PR
 
-Backend
+## License
 
-Set environment variables
+Copyright © 2025 KrushiRakshak
 
-Deploy FastAPI on Render, Railway, AWS EC2, Azure, etc.
-
-Update frontend backend URL in config.ts
-
-Contributing
-
-Fork the repo
-
-Create a feature branch
-
-Make changes
-
-Run tests
-
-Commit with a clear message
-
-Open a Pull Request
-
-License
-
-© 2025 KrushiRakshak
-All rights reserved.
+## Support
